@@ -1,0 +1,54 @@
+name: publish
+
+# Genera ejecutables autocontenidos (no requieren tener .NET instalado) para
+# Linux, Windows y macOS. Se dispara a mano desde "Actions", o al crear un
+# tag de versión (v1.0.0, v1.1.0, etc.), en cuyo caso además adjunta los
+# archivos a un Release de GitHub.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: win-x64
+            os: ubuntu-latest
+          - rid: osx-x64
+            os: ubuntu-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publicar ejecutable autocontenido (${{ matrix.rid }})
+        run: >
+          dotnet publish -c Release -r ${{ matrix.rid }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -o publicado/${{ matrix.rid }}
+
+      - name: Subir como artifact descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: LabInventario-${{ matrix.rid }}
+          path: publicado/${{ matrix.rid }}
+
+      - name: Adjuntar al Release (solo si el push fue un tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: publicado/${{ matrix.rid }}/**

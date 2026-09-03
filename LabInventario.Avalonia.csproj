@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Multiplataforma: net8.0 "a secas" (sin -windows) compila y corre en Linux, macOS y Windows -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LabInventario</RootNamespace>
+    <AssemblyName>LabInventario</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <!-- UI multiplataforma (reemplaza a Windows Forms) -->
+    <PackageReference Include="Avalonia" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.1.3" />
+    <!-- Solo necesario para depurar con el visor de diagnóstico de Avalonia -->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.1.3" Condition="'$(Configuration)' == 'Debug'" />
+
+    <!-- Proveedor ADO.NET ligero para SQLite (base de datos local, sin servidor).
+         Se usa el paquete ".Core" (sin motor nativo incluido) porque el motor
+         nativo real lo aporta el bundle de SQLCipher de abajo: así el archivo
+         .db queda cifrado en disco (AES-256) y no se puede abrir con
+         herramientas genéricas como "DB Browser for SQLite". -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="8.0.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
+    <!-- Lectura/escritura de archivos Excel (.xlsx) para el módulo de importación -->
+    <PackageReference Include="ClosedXML" Version="0.104.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Los archivos de ejemplo se copian junto al ejecutable para poder probar la importación -->
+    <None Include="ejemplos\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

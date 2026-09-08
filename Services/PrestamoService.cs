@@ -127,6 +127,11 @@ namespace LabInventario.Services
                 else
                 {
                     _prestamoRepo.ActualizarCantidad(prestamo.Id, prestamo.Cantidad - restante);
+                    // Deja un registro nuevo y visible de lo que sí se
+                    // devolvió, en vez de que la devolución parcial quede
+                    // "escondida" como una simple resta de cantidad sobre
+                    // el préstamo que sigue activo.
+                    _prestamoRepo.CrearDevuelto(alumnoId, materialId, restante, prestamo.FechaSalida, fecha);
                     restante = 0;
                 }
             }
@@ -165,7 +170,10 @@ namespace LabInventario.Services
             if (cantidad == prestamo.Cantidad)
                 _prestamoRepo.MarcarDevuelto(prestamo.Id, fecha);
             else
+            {
                 _prestamoRepo.ActualizarCantidad(prestamo.Id, prestamo.Cantidad - cantidad);
+                _prestamoRepo.CrearDevuelto(prestamo.AlumnoId, prestamo.MaterialId, cantidad, prestamo.FechaSalida, fecha);
+            }
 
             _materialRepo.AjustarDisponible(prestamo.MaterialId, cantidad);
             material.CantidadDisponible += cantidad;

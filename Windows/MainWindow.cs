@@ -1,7 +1,9 @@
+using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform;
 using LabInventario.Dialogs;
 using LabInventario.Services;
 using LabInventario.Theme;
@@ -43,6 +45,7 @@ namespace LabInventario.Windows
             var esAdmin = SesionActual.EsAdministrador;
 
             Title = $"Gestión de Salidas y Entradas - Laboratorio de Electrónica  [{(esAdmin ? "Administrador" : "Usuario")}]";
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://LabInventario/Assets/icon.png")));
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Width = 1050;
             Height = 700;
@@ -50,14 +53,7 @@ namespace LabInventario.Windows
             MinHeight = 560;
 
             BackgroundStyle = SukiBackgroundStyle.GradientSoft;
-            LogoContent = new TextBlock
-            {
-                Text = "UAS",
-                FontWeight = FontWeight.Black,
-                FontSize = 13,
-                Foreground = new SolidColorBrush(TemaUas.DoradoUas),
-                VerticalAlignment = VerticalAlignment.Center,
-            };
+            LogoContent = ConstruirInsigniaUas();
 
             IsMenuVisible = true;
             MenuItems = ConstruirMenu(esAdmin);
@@ -85,8 +81,60 @@ namespace LabInventario.Windows
                     prestamosView.Actualizar();
             };
 
-            Content = tabs;
+            // Listón institucional: una franja delgada azul→dorado justo
+            // arriba de las pestañas. Es el único "bloque" de color
+            // institucional grande de toda la ventana (el resto de la marca
+            // vive en la insignia de la barra de título y en el color con
+            // que SukiUI ya resalta la pestaña activa), a propósito: se
+            // busca que la app se sienta "de la UAS" sin que el color
+            // compita con los botones ni con los datos.
+            var liston = new Border
+            {
+                Height = 4,
+                Background = new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+                    GradientStops =
+                    {
+                        new GradientStop(TemaUas.AzulUas, 0),
+                        new GradientStop(TemaUas.DoradoUas, 1),
+                    },
+                },
+            };
+            DockPanel.SetDock(liston, Dock.Top);
+
+            var raizVentana = new DockPanel();
+            raizVentana.Children.Add(liston);
+            raizVentana.Children.Add(tabs);
+
+            Content = raizVentana;
         }
+
+        /// <summary>
+        /// Insignia circular "UAS" (dorado sobre azul) para la esquina de
+        /// la barra de título. No es el escudo oficial de la universidad
+        /// (evitamos reproducirlo por derechos de autor) — es solo un
+        /// monograma propio, discreto, para que se note que es un
+        /// programa institucional sin imitar el logo real.
+        /// </summary>
+        private static Border ConstruirInsigniaUas() => new()
+        {
+            Width = 26,
+            Height = 26,
+            CornerRadius = new CornerRadius(13),
+            Background = new SolidColorBrush(TemaUas.DoradoUas),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = "UAS",
+                FontWeight = FontWeight.Black,
+                FontSize = 8,
+                Foreground = new SolidColorBrush(TemaUas.AzulUas),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
 
         private AvaloniaList<MenuItem> ConstruirMenu(bool esAdmin)
         {

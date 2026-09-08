@@ -5,15 +5,22 @@
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
-        <!--
-            Tema visual SukiUI. Se declara DESPUÉS de FluentTheme (y del
-            estilo Fluent del DataGrid) a propósito: así sus reglas ganan
-            la resolución de estilos y son las que terminan pintando la
-            app, mientras Fluent sigue disponible como base para
-            cualquier control/estado que SukiUI no re-plantille. El color
-            "Blue" de partida se sustituye en tiempo de ejecución
-            (ver App.axaml.cs) por la paleta institucional de la UAS.
-        -->
         <suki:SukiTheme Locale="es-ES" ThemeColor="Blue" />
+
+        <Style Selector="Button">
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style Selector="DataGridColumnHeader">
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="DataGridCell">
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="ListBoxItem">
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
     </Application.Styles>
 </Application>

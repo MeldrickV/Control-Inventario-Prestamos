@@ -49,6 +49,33 @@ namespace LabInventario.Data
             comando.ExecuteNonQuery();
         }
 
+        /// <summary>
+        /// Crea directamente un préstamo ya cerrado (Estado 'Devuelto').
+        /// Se usa para dejar un registro NUEVO y visible en el historial
+        /// cuando una devolución es parcial: el préstamo original que
+        /// sigue activo conserva su cantidad restante y su fecha de
+        /// salida sin tocar (ver <see cref="ActualizarCantidad"/>), y este
+        /// método agrega, aparte, una fila cerrada con la cantidad que sí
+        /// se devolvió, la FechaSalida original (de dónde salió) y la
+        /// FechaRegreso de este momento — así la devolución parcial deja
+        /// rastro en vez de perderse dentro del préstamo activo restante.
+        /// </summary>
+        public int CrearDevuelto(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, DateTime fechaRegreso)
+        {
+            using var conexion = _db.ObtenerConexion();
+            using var comando = conexion.CreateCommand();
+            comando.CommandText = @"
+                INSERT INTO prestamos (AlumnoId, MaterialId, Cantidad, FechaSalida, FechaRegreso, Estado)
+                VALUES ($alumnoId, $materialId, $cantidad, $fechaSalida, $fechaRegreso, 'Devuelto');
+                SELECT last_insert_rowid();";
+            comando.Parameters.AddWithValue("$alumnoId", alumnoId);
+            comando.Parameters.AddWithValue("$materialId", materialId);
+            comando.Parameters.AddWithValue("$cantidad", cantidad);
+            comando.Parameters.AddWithValue("$fechaSalida", fechaSalida.ToString("yyyy-MM-dd HH:mm:ss"));
+            comando.Parameters.AddWithValue("$fechaRegreso", fechaRegreso.ToString("yyyy-MM-dd HH:mm:ss"));
+            return Convert.ToInt32((long)comando.ExecuteScalar()!);
+        }
+
         public void Eliminar(int idPrestamo)
         {
             using var conexion = _db.ObtenerConexion();

@@ -3,11 +3,12 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using LabInventario.Helpers;
 using LabInventario.Services;
+using SukiUI.Controls;
 
 namespace LabInventario.Dialogs
 {
     /// <summary>Diálogo modal para que el administrador cambie su contraseña.</summary>
-    public class CambiarPasswordDialog : Window
+    public class CambiarPasswordDialog : SukiWindow
     {
         private readonly AuthService _auth = new();
 
@@ -20,30 +21,32 @@ namespace LabInventario.Dialogs
         {
             Title = "Cambiar contraseña de administrador";
             CanResize = false;
+            CanMinimize = false;
+            CanFullScreen = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             SizeToContent = SizeToContent.WidthAndHeight;
 
-            var btnGuardar = new Button { Content = "Guardar", Width = 100, IsDefault = true };
+            var btnGuardar = new Button { Content = "Guardar", Classes = { "Flat" }, MinWidth = 100, IsDefault = true };
             btnGuardar.Click += async (_, _) => await Guardar();
 
-            var btnCancelar = new Button { Content = "Cancelar", Width = 100, IsCancel = true };
+            var btnCancelar = new Button { Content = "Cancelar", Classes = { "Outlined" }, MinWidth = 100, IsCancel = true };
             btnCancelar.Click += (_, _) => Close();
 
             var panelBotones = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0, 14, 0, 0) };
             panelBotones.Children.Add(btnGuardar);
             panelBotones.Children.Add(btnCancelar);
 
-            var raiz = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 6, Width = 300 };
-            raiz.Children.Add(new TextBlock { Text = "Contraseña actual:" });
-            raiz.Children.Add(_txtActual);
-            raiz.Children.Add(new TextBlock { Text = "Nueva contraseña:", Margin = new Avalonia.Thickness(0, 10, 0, 0) });
-            raiz.Children.Add(_txtNueva);
-            raiz.Children.Add(new TextBlock { Text = "Confirmar nueva contraseña:", Margin = new Avalonia.Thickness(0, 10, 0, 0) });
-            raiz.Children.Add(_txtConfirmar);
-            raiz.Children.Add(_lblError);
-            raiz.Children.Add(panelBotones);
+            var panel = new StackPanel { Spacing = 6, Width = 300 };
+            panel.Children.Add(new TextBlock { Text = "Contraseña actual:" });
+            panel.Children.Add(_txtActual);
+            panel.Children.Add(new TextBlock { Text = "Nueva contraseña:", Margin = new Avalonia.Thickness(0, 10, 0, 0) });
+            panel.Children.Add(_txtNueva);
+            panel.Children.Add(new TextBlock { Text = "Confirmar nueva contraseña:", Margin = new Avalonia.Thickness(0, 10, 0, 0) });
+            panel.Children.Add(_txtConfirmar);
+            panel.Children.Add(_lblError);
+            panel.Children.Add(panelBotones);
 
-            Content = raiz;
+            Content = new GlassCard { Margin = new Avalonia.Thickness(20), Content = panel };
         }
 
         private async Task Guardar()

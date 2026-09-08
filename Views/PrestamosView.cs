@@ -125,13 +125,13 @@ namespace LabInventario.Views
             _txtFiltro.TextChanged += (_, _) => Cargar();
             _chkSoloActivos.PropertyChanged += (_, e) => { if (e.Property == ToggleButton.IsCheckedProperty) Cargar(); };
 
-            var btnDevolver = new Button { Content = "Marcar como devuelto", Width = 180 };
+            var btnDevolver = new Button { Content = "Marcar como devuelto", Classes = { "Flat" }, MinWidth = 180 };
             btnDevolver.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), MarcarDevuelto);
 
             var lblAyuda = new TextBlock
             {
                 Text = "Toca ▶ para ver el detalle, o un encabezado para ordenar.",
-                Foreground = Brushes.DimGray,
+                Classes = { "Caption" },
                 FontSize = 11,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Avalonia.Thickness(15, 0, 0, 0),

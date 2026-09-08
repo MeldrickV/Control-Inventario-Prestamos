@@ -15,13 +15,27 @@
 
   <ItemGroup>
     <!-- UI multiplataforma (reemplaza a Windows Forms) -->
-    <PackageReference Include="Avalonia" Version="11.1.3" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.1.3" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.3" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.1.3" />
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.1.3" />
+    <!--
+      Se sube de 11.1.3 a 11.3.x porque SukiUI 6.1.x (la última serie de la
+      librería aún compatible con Avalonia 11; la rama "main" del repo ya
+      exige Avalonia 12) declara como mínimo Avalonia >= 11.3.4. Sigue
+      siendo la misma versión mayor (11), sin cambios de API relevantes
+      para los controles que usa este proyecto.
+    -->
+    <PackageReference Include="Avalonia" Version="11.3.14" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.14" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.14" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.14" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
     <!-- Solo necesario para depurar con el visor de diagnóstico de Avalonia -->
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.1.3" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.14" Condition="'$(Configuration)' == 'Debug'" />
+
+    <!--
+      SukiUI: tema visual sobre Avalonia usado para el rediseño estético.
+      Se fija la serie 6.x (no la 7.x/"main" del repo, que ya requiere
+      Avalonia 12) para no tener que migrar el proyecto de framework.
+    -->
+    <PackageReference Include="SukiUI" Version="6.1.1" />
 
     <!-- Proveedor ADO.NET ligero para SQLite (base de datos local, sin servidor).
          Se usa el paquete ".Core" (sin motor nativo incluido) porque el motor

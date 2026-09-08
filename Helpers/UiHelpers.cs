@@ -1,93 +1,43 @@
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Layout;
-using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using SukiUI.Controls;
+using SukiUI.MessageBox;
 using System.IO;
 
 namespace LabInventario.Helpers
 {
     /// <summary>
-    /// Avalonia (a diferencia de WinForms) no trae un <c>MessageBox</c> ni un
-    /// <c>OpenFileDialog</c> listos para usar de forma síncrona: hay que
-    /// mostrar una ventana propia y, para archivos, usar el
-    /// <c>IStorageProvider</c> asíncrono. Esta clase reúne esos reemplazos
-    /// para que el resto de la app se lea casi igual que la versión WinForms.
+    /// Reemplazos de <c>MessageBox</c> / <c>OpenFileDialog</c> / <c>SaveFileDialog</c>
+    /// (que Avalonia no trae de forma nativa), apoyados en el sistema de
+    /// diálogos de SukiUI (<see cref="SukiMessageBox"/>) para que luzcan
+    /// acordes al resto de la aplicación (mismo tema, iconos, animaciones).
+    ///
+    /// La firma pública de esta clase se mantiene igual a la versión
+    /// original a propósito: todas las vistas y diálogos que ya llaman a
+    /// <c>Dialogos.MostrarInfo/MostrarError/MostrarAdvertencia/Confirmar/
+    /// SeleccionarArchivo/GuardarArchivo</c> siguen funcionando sin cambiar
+    /// una sola línea.
     /// </summary>
     public static class Dialogos
     {
-        public enum Icono { Informacion, Advertencia, Error, Pregunta }
-
         public static Task MostrarInfo(Window propietaria, string mensaje, string titulo = "Información") =>
-            MostrarOk(propietaria, mensaje, titulo, Icono.Informacion);
+            SukiMessageBox.ShowDialogResult(propietaria, mensaje, SukiMessageBoxButtons.OK, titulo,
+                icon: SukiMessageBoxIcons.Information);
 
         public static Task MostrarAdvertencia(Window propietaria, string mensaje, string titulo = "Atención") =>
-            MostrarOk(propietaria, mensaje, titulo, Icono.Advertencia);
+            SukiMessageBox.ShowDialogResult(propietaria, mensaje, SukiMessageBoxButtons.OK, titulo,
+                icon: SukiMessageBoxIcons.Warning);
 
         public static Task MostrarError(Window propietaria, string mensaje, string titulo = "Error") =>
-            MostrarOk(propietaria, mensaje, titulo, Icono.Error);
-
-        private static async Task MostrarOk(Window propietaria, string mensaje, string titulo, Icono icono)
-        {
-            var ventana = ConstruirVentana(mensaje, titulo, icono);
-            var btnOk = new Button { Content = "Aceptar", Width = 90, IsDefault = true };
-            btnOk.Click += (_, _) => ventana.Close(true);
-            ((StackPanel)ventana.Content!).Children.Add(EnvolverBotones(btnOk));
-            await ventana.ShowDialog<bool>(propietaria);
-        }
+            SukiMessageBox.ShowDialogResult(propietaria, mensaje, SukiMessageBoxButtons.OK, titulo,
+                icon: SukiMessageBoxIcons.Error);
 
         /// <summary>Confirmación Sí/No. Devuelve true si el usuario eligió "Sí".</summary>
         public static async Task<bool> Confirmar(Window propietaria, string mensaje, string titulo = "Confirmar")
         {
-            var ventana = ConstruirVentana(mensaje, titulo, Icono.Pregunta);
-            var btnSi = new Button { Content = "Sí", Width = 90, IsDefault = true };
-            var btnNo = new Button { Content = "No", Width = 90 };
-            btnSi.Click += (_, _) => ventana.Close(true);
-            btnNo.Click += (_, _) => ventana.Close(false);
-            var panelBotones = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Center };
-            panelBotones.Children.Add(btnSi);
-            panelBotones.Children.Add(btnNo);
-            ((StackPanel)ventana.Content!).Children.Add(panelBotones);
-            return await ventana.ShowDialog<bool>(propietaria);
-        }
-
-        private static Window ConstruirVentana(string mensaje, string titulo, Icono icono)
-        {
-            var color = icono switch
-            {
-                Icono.Error => Color.FromRgb(176, 0, 32),
-                Icono.Advertencia => Color.FromRgb(180, 120, 0),
-                Icono.Pregunta => Color.FromRgb(26, 78, 122),
-                _ => Color.FromRgb(30, 30, 30),
-            };
-
-            var texto = new TextBlock
-            {
-                Text = mensaje,
-                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                MaxWidth = 380,
-                Foreground = new SolidColorBrush(color),
-                Margin = new Avalonia.Thickness(24, 20, 24, 10),
-            };
-
-            var raiz = new StackPanel { Spacing = 15 };
-            raiz.Children.Add(texto);
-
-            return new Window
-            {
-                Title = titulo,
-                CanResize = false,
-                SizeToContent = SizeToContent.WidthAndHeight,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Content = raiz,
-            };
-        }
-
-        private static StackPanel EnvolverBotones(Button boton)
-        {
-            var panel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Avalonia.Thickness(0, 0, 0, 15) };
-            panel.Children.Add(boton);
-            return panel;
+            var resultado = await SukiMessageBox.ShowDialogResult(propietaria, mensaje, SukiMessageBoxButtons.YesNo, titulo,
+                icon: SukiMessageBoxIcons.Question);
+            return resultado == SukiMessageBoxResult.Yes;
         }
 
         /// <summary>Selector de archivos (reemplazo async de OpenFileDialog). Devuelve null si se cancela.</summary>
@@ -115,6 +65,7 @@ namespace LabInventario.Helpers
             return archivo?.TryGetLocalPath();
         }
     }
+
     /// <summary>
     /// Envuelve el manejador de un botón/evento en un try/catch y muestra
     /// cualquier excepción en un diálogo, en vez de dejar que se pierda en
@@ -137,7 +88,7 @@ namespace LabInventario.Helpers
                     await Dialogos.MostrarError(propietaria, ex.Message, "Ocurrió un error");
             }
         }
-    
+
         public static void RegistrarEnArchivo(Exception ex)
         {
             try
@@ -151,29 +102,39 @@ namespace LabInventario.Helpers
             }
         }
     }
+
     /// <summary>
-    /// Avalonia no incluye un control "GroupBox" propio (como sí tenía
-    /// WinForms). Este helper arma un recuadro con encabezado en negritas
-    /// que cumple el mismo papel visual.
+    /// Avalonia no incluye un control "GroupBox" propio, pero SukiUI sí
+    /// (<see cref="SukiUI.Controls.GroupBox"/>). Este helper envuelve ese
+    /// control dentro de una <see cref="GlassCard"/> para obtener el
+    /// aspecto de "tarjeta" del resto de la librería, manteniendo la misma
+    /// firma que antes (<c>Cajas.GroupBox(titulo, contenido, ancho)</c>)
+    /// para no tener que tocar las vistas que ya la usan.
+    ///
+    /// El "ancho" que reciben las vistas se aplica como <c>MinWidth</c> (no
+    /// como <c>Width</c> fijo): así la tarjeta nunca queda más angosta de lo
+    /// pensado, pero si el contenedor que la aloja le da más espacio (por
+    /// ejemplo, una columna de <see cref="Grid"/> con ancho "*"), la
+    /// tarjeta lo aprovecha en vez de quedarse pegada a un tamaño fijo.
     /// </summary>
     public static class Cajas
     {
-        public static Border GroupBox(string titulo, Control contenido, double? width = null)
+        public static Control GroupBox(string titulo, Control contenido, double? width = null)
         {
-            var panel = new StackPanel { Spacing = 8 };
-            panel.Children.Add(new TextBlock { Text = titulo, FontWeight = FontWeight.Bold });
-            panel.Children.Add(contenido);
-
-            var borde = new Border
+            var caja = new SukiUI.Controls.GroupBox
             {
-                BorderBrush = Brushes.LightGray,
-                BorderThickness = new Avalonia.Thickness(1),
-                CornerRadius = new Avalonia.CornerRadius(6),
-                Padding = new Avalonia.Thickness(14),
-                Child = panel,
+                Header = titulo,
+                Content = contenido,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
             };
-            if (width.HasValue) borde.Width = width.Value;
-            return borde;
+
+            var tarjeta = new GlassCard
+            {
+                Content = caja,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            };
+            if (width.HasValue) tarjeta.MinWidth = width.Value;
+            return tarjeta;
         }
     }
 }

@@ -4,7 +4,9 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using LabInventario.Helpers;
 using LabInventario.Services;
+using LabInventario.Theme;
 using LabInventario.Windows;
+using SukiUI;
 
 namespace LabInventario
 {
@@ -47,6 +49,15 @@ namespace LabInventario
                 Errores.RegistrarEnArchivo(e.Exception);
                 e.SetObserved();
             };
+
+            // Sustituye el color "Blue" de arranque (declarado en App.axaml
+            // solo como valor por defecto válido) por la paleta azul/dorado
+            // institucional de la UAS. Se hace aquí, antes de mostrar
+            // cualquier ventana, para que Login y MainWindow ya nazcan con
+            // el color correcto.
+            var sukiTheme = SukiTheme.GetInstance();
+            sukiTheme.AddColorTheme(TemaUas.Tema);
+            sukiTheme.ChangeColorTheme(TemaUas.Tema);
 
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {

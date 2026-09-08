@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SukiUI.Controls;
 
 namespace LabInventario.Dialogs
 {
@@ -10,7 +11,7 @@ namespace LabInventario.Dialogs
     /// necesita, mostrando una vista previa de los datos para facilitar
     /// la decisión.
     /// </summary>
-    public class MapeoColumnasDialog : Window
+    public class MapeoColumnasDialog : SukiWindow
     {
         private readonly Dictionary<string, ComboBox> _combos = new();
 
@@ -21,13 +22,15 @@ namespace LabInventario.Dialogs
         {
             Title = "Mapeo de columnas para importación";
             CanResize = false;
+            CanMinimize = false;
+            CanFullScreen = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             SizeToContent = SizeToContent.WidthAndHeight;
 
             var lblTitulo = new TextBlock
             {
                 Text = "Asocia cada campo del sistema con la columna correspondiente del archivo:",
-                FontWeight = FontWeight.Bold,
+                Classes = { "h5" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 530,
             };
@@ -59,7 +62,7 @@ namespace LabInventario.Dialogs
                 _combos[campo] = combo;
             }
 
-            var lblPreview = new TextBlock { Text = "Vista previa (primeras filas del archivo):", Margin = new Avalonia.Thickness(0, 15, 0, 4) };
+            var lblPreview = new TextBlock { Text = "Vista previa (primeras filas del archivo):", Classes = { "Caption" }, Margin = new Avalonia.Thickness(0, 15, 0, 4) };
 
             var lineas = new List<string> { string.Join(" | ", headers) };
             lineas.AddRange(vistaPrevia.Take(5).Select(fila => string.Join(" | ", fila.Select(v => v ?? ""))));
@@ -78,24 +81,24 @@ namespace LabInventario.Dialogs
             ScrollViewer.SetHorizontalScrollBarVisibility(txtPreview, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
             ScrollViewer.SetVerticalScrollBarVisibility(txtPreview, Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
 
-            var btnImportar = new Button { Content = "Importar", Width = 110, IsDefault = true };
+            var btnImportar = new Button { Content = "Importar", Classes = { "Flat" }, MinWidth = 110, IsDefault = true };
             btnImportar.Click += (_, _) => Confirmar();
 
-            var btnCancelar = new Button { Content = "Cancelar", Width = 110, IsCancel = true };
+            var btnCancelar = new Button { Content = "Cancelar", Classes = { "Outlined" }, MinWidth = 110, IsCancel = true };
             btnCancelar.Click += (_, _) => Close();
 
             var panelBotones = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0, 14, 0, 0) };
             panelBotones.Children.Add(btnImportar);
             panelBotones.Children.Add(btnCancelar);
 
-            var raiz = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 4, Width = 530 };
-            raiz.Children.Add(lblTitulo);
-            raiz.Children.Add(grid);
-            raiz.Children.Add(lblPreview);
-            raiz.Children.Add(txtPreview);
-            raiz.Children.Add(panelBotones);
+            var panel = new StackPanel { Spacing = 4, Width = 530 };
+            panel.Children.Add(lblTitulo);
+            panel.Children.Add(grid);
+            panel.Children.Add(lblPreview);
+            panel.Children.Add(txtPreview);
+            panel.Children.Add(panelBotones);
 
-            Content = raiz;
+            Content = new GlassCard { Margin = new Avalonia.Thickness(20), Content = panel };
         }
 
         private void Confirmar()

@@ -38,8 +38,7 @@ namespace LabInventario.Views
             var lblTitulo = new TextBlock
             {
                 Text = "Importación masiva de datos (Excel, CSV/TXT, SQL, .db/.sqlite)",
-                FontWeight = FontWeight.Bold,
-                FontSize = 14,
+                Classes = { "h4" },
             };
 
             _cmbEntidad.ItemsSource = new[] { "Alumnos", "Materiales" };
@@ -49,7 +48,7 @@ namespace LabInventario.Views
             panelOpciones.Children.Add(new TextBlock { Text = "Tipo de datos a importar:", VerticalAlignment = VerticalAlignment.Center });
             panelOpciones.Children.Add(_cmbEntidad);
 
-            var btnImportar = new Button { Content = "Seleccionar archivo e importar...", Width = 260, Height = 32 };
+            var btnImportar = new Button { Content = "Seleccionar archivo e importar...", Classes = { "Flat" }, MinWidth = 260, Height = 32 };
             btnImportar.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), IniciarImportacion);
 
             var lblLog = new TextBlock { Text = "Registro de importaciones:" };

@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SukiUI.Controls;
 
 namespace LabInventario.Dialogs
 {
@@ -10,7 +11,7 @@ namespace LabInventario.Dialogs
     /// Se usa desde la pestaña de historial para las devoluciones
     /// manuales, y permite devoluciones parciales (ej. devolver 1 de 3).
     /// </summary>
-    public class CantidadDialog : Window
+    public class CantidadDialog : SukiWindow
     {
         private readonly NumericUpDown _numCantidad;
 
@@ -20,6 +21,8 @@ namespace LabInventario.Dialogs
         {
             Title = "¿Cuántos regresan?";
             CanResize = false;
+            CanMinimize = false;
+            CanFullScreen = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             SizeToContent = SizeToContent.WidthAndHeight;
 
@@ -32,14 +35,14 @@ namespace LabInventario.Dialogs
                 FormatString = "0",
             };
 
-            var btnAceptar = new Button { Content = "Aceptar", Width = 90, IsDefault = true };
+            var btnAceptar = new Button { Content = "Aceptar", Classes = { "Flat" }, MinWidth = 90, IsDefault = true };
             btnAceptar.Click += (_, _) =>
             {
                 Resultado = (int)(_numCantidad.Value ?? valorInicial);
                 Close();
             };
 
-            var btnCancelar = new Button { Content = "Cancelar", Width = 90, IsCancel = true };
+            var btnCancelar = new Button { Content = "Cancelar", Classes = { "Outlined" }, MinWidth = 90, IsCancel = true };
             btnCancelar.Click += (_, _) => Close();
 
             var panelBotones = new StackPanel
@@ -52,12 +55,12 @@ namespace LabInventario.Dialogs
             panelBotones.Children.Add(btnAceptar);
             panelBotones.Children.Add(btnCancelar);
 
-            var raiz = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 8, Width = 280 };
-            raiz.Children.Add(new TextBlock { Text = mensaje, TextWrapping = TextWrapping.Wrap });
-            raiz.Children.Add(_numCantidad);
-            raiz.Children.Add(panelBotones);
+            var panel = new StackPanel { Spacing = 8, Width = 280 };
+            panel.Children.Add(new TextBlock { Text = mensaje, TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(_numCantidad);
+            panel.Children.Add(panelBotones);
 
-            Content = raiz;
+            Content = new GlassCard { Margin = new Avalonia.Thickness(20), Content = panel };
         }
     }
 }

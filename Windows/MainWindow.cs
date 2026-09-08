@@ -1,8 +1,13 @@
+using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
 using LabInventario.Dialogs;
 using LabInventario.Services;
+using LabInventario.Theme;
 using LabInventario.Views;
+using SukiUI.Controls;
+using SukiUI.Enums;
 
 namespace LabInventario.Windows
 {
@@ -14,10 +19,17 @@ namespace LabInventario.Windows
     ///
     /// Las pestañas de Inventario, Alumnos, Importar datos y Exportar datos
     /// —que pueden modificar o sacar la información delicada del
-    /// laboratorio— solo se agregan cuando <see cref="SesionActual"/> indica que se entró como
-    /// Administrador. El rol Usuario solo ve Operación e Historial.
+    /// laboratorio— solo se agregan cuando <see cref="SesionActual"/> indica
+    /// que se entró como Administrador. El rol Usuario solo ve Operación e
+    /// Historial.
+    ///
+    /// Nota de diseño: hereda de <see cref="SukiWindow"/> (barra de título
+    /// moderna, fondo con degradado sutil) en vez de <see cref="Window"/>.
+    /// El menú, antes armado a mano dentro de un <see cref="DockPanel"/>,
+    /// ahora se entrega vía la propiedad nativa <c>MenuItems</c> de
+    /// SukiWindow; toda la lógica de cada opción de menú es la misma.
     /// </summary>
-    public class MainWindow : Window
+    public class MainWindow : SukiWindow
     {
         /// <summary>
         /// Se pone en true cuando el usuario elige "Cerrar sesión" desde el
@@ -37,7 +49,18 @@ namespace LabInventario.Windows
             MinWidth = 880;
             MinHeight = 560;
 
-            var menu = ConstruirMenu(esAdmin);
+            BackgroundStyle = SukiBackgroundStyle.GradientSoft;
+            LogoContent = new TextBlock
+            {
+                Text = "UAS",
+                FontWeight = FontWeight.Black,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(TemaUas.DoradoUas),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            IsMenuVisible = true;
+            MenuItems = ConstruirMenu(esAdmin);
 
             var tabs = new TabControl();
 
@@ -62,17 +85,12 @@ namespace LabInventario.Windows
                     prestamosView.Actualizar();
             };
 
-            var raiz = new DockPanel();
-            DockPanel.SetDock(menu, Dock.Top);
-            raiz.Children.Add(menu);
-            raiz.Children.Add(tabs); // último hijo: llena el resto del espacio
-
-            Content = raiz;
+            Content = tabs;
         }
 
-        private Menu ConstruirMenu(bool esAdmin)
+        private AvaloniaList<MenuItem> ConstruirMenu(bool esAdmin)
         {
-            var menu = new Menu();
+            var items = new AvaloniaList<MenuItem>();
 
             var itemCerrarSesion = new MenuItem { Header = "Cerrar sesión" };
             itemCerrarSesion.Click += (_, _) =>
@@ -83,7 +101,7 @@ namespace LabInventario.Windows
 
             var menuSesion = new MenuItem { Header = "Sesión" };
             menuSesion.Items.Add(itemCerrarSesion);
-            menu.Items.Add(menuSesion);
+            items.Add(menuSesion);
 
             if (esAdmin)
             {
@@ -104,10 +122,10 @@ namespace LabInventario.Windows
                 var menuAdmin = new MenuItem { Header = "Administración" };
                 menuAdmin.Items.Add(itemPassword);
                 menuAdmin.Items.Add(itemConfigEscaneo);
-                menu.Items.Add(menuAdmin);
+                items.Add(menuAdmin);
             }
 
-            return menu;
+            return items;
         }
     }
 }

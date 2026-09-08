@@ -31,8 +31,7 @@ namespace LabInventario.Views
             var lblTitulo = new TextBlock
             {
                 Text = "Exportación de datos",
-                FontWeight = FontWeight.Bold,
-                FontSize = 14,
+                Classes = { "h4" },
             };
 
             var raiz = new DockPanel { Margin = new Avalonia.Thickness(15) };
@@ -55,7 +54,7 @@ namespace LabInventario.Views
 
             var seccionRespaldo = new StackPanel { Spacing = 10 };
 
-            var btnRespaldoCifrado = new Button { Content = "Respaldo cifrado (.db)...", Width = 260, Height = 32 };
+            var btnRespaldoCifrado = new Button { Content = "Respaldo cifrado (.db)...", Classes = { "Flat" }, MinWidth = 260, Height = 32 };
             btnRespaldoCifrado.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), async () =>
             {
                 var propietaria = VentanaPropietaria();
@@ -68,7 +67,7 @@ namespace LabInventario.Views
                 await Dialogos.MostrarInfo(propietaria, "Respaldo generado. Sigue cifrado: solo se puede volver a abrir con esta app en esta misma máquina.", "Respaldo completado");
             });
 
-            var btnRespaldoXlsx = new Button { Content = "Volcado completo (.xlsx, sin cifrar)...", Width = 260, Height = 32 };
+            var btnRespaldoXlsx = new Button { Content = "Volcado completo (.xlsx, sin cifrar)...", Classes = { "Warning" }, MinWidth = 260, Height = 32 };
             btnRespaldoXlsx.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), async () =>
             {
                 var propietaria = VentanaPropietaria();
@@ -89,7 +88,14 @@ namespace LabInventario.Views
             seccionRespaldo.Children.Add(btnRespaldoXlsx);
             var cajaRespaldo = Cajas.GroupBox("Base de datos completa", seccionRespaldo);
 
-            var panelCajas = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 15 };
+            // Grid con columnas "*" (no StackPanel horizontal) para que
+            // ambas cajas se repartan el ancho disponible en vez de
+            // quedarse pegadas a la izquierda con espacio vacío a la derecha.
+            var panelCajas = new Grid { ColumnSpacing = 15 };
+            panelCajas.ColumnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star));
+            panelCajas.ColumnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star));
+            Grid.SetColumn(cajaDatos, 0);
+            Grid.SetColumn(cajaRespaldo, 1);
             panelCajas.Children.Add(cajaDatos);
             panelCajas.Children.Add(cajaRespaldo);
             DockPanel.SetDock(panelCajas, Dock.Top);
@@ -110,10 +116,10 @@ namespace LabInventario.Views
             var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
             panel.Children.Add(new TextBlock { Text = etiqueta, Width = 150, VerticalAlignment = VerticalAlignment.Center });
 
-            var btnCsv = new Button { Content = "CSV...", Width = 90 };
+            var btnCsv = new Button { Content = "CSV...", Classes = { "Outlined" }, MinWidth = 90 };
             btnCsv.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), exportarCsv);
 
-            var btnXlsx = new Button { Content = "Excel...", Width = 90 };
+            var btnXlsx = new Button { Content = "Excel...", Classes = { "Outlined" }, MinWidth = 90 };
             btnXlsx.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), exportarXlsx);
 
             panel.Children.Add(btnCsv);

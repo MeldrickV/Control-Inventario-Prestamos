@@ -10,8 +10,19 @@
     <AssemblyName>LabInventario</AssemblyName>
     <LangVersion>latest</LangVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Ícono embebido en el ejecutable (solo tiene efecto en Windows: es
+         lo que hace que el .exe deje de verse "en blanco" en el explorador
+         de archivos, la barra de tareas y los accesos directos). -->
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- El .png se embebe como recurso de Avalonia para poder usarlo en
+         tiempo de ejecución como ícono de ventana (barra de título /
+         Alt+Tab) en las 3 plataformas -->
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- UI multiplataforma (reemplaza a Windows Forms) -->

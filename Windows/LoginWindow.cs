@@ -3,6 +3,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform;
 using LabInventario.Helpers;
 using LabInventario.Models;
 using LabInventario.Services;
@@ -44,6 +45,7 @@ namespace LabInventario.Windows
         public LoginWindow()
         {
             Title = "Iniciar sesión — Laboratorio de Electrónica";
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://LabInventario/Assets/icon.png")));
             CanResize = false;
             CanMinimize = false;
             CanFullScreen = false;
@@ -52,13 +54,22 @@ namespace LabInventario.Windows
             SizeToContent = SizeToContent.Height;
 
             BackgroundStyle = SukiBackgroundStyle.GradientSoft;
-            LogoContent = new TextBlock
+            LogoContent = new Border
             {
-                Text = "UAS",
-                FontWeight = FontWeight.Black,
-                FontSize = 14,
-                Foreground = new SolidColorBrush(TemaUas.DoradoUas),
+                Width = 26,
+                Height = 26,
+                CornerRadius = new Avalonia.CornerRadius(13),
+                Background = new SolidColorBrush(TemaUas.DoradoUas),
                 VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = "UAS",
+                    FontWeight = FontWeight.Black,
+                    FontSize = 8,
+                    Foreground = new SolidColorBrush(TemaUas.AzulUas),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
             };
 
             var lblTitulo = new TextBlock { Text = "¿Con qué rol quieres entrar?", Classes = { "h4" } };
@@ -84,7 +95,7 @@ namespace LabInventario.Windows
             var btnEntrar = new Button
             {
                 Content = "Entrar",
-                Classes = { "Flat" },
+                Classes = { "Outlined" },
                 MinWidth = 110,
                 MinHeight = 34,
                 IsDefault = true,

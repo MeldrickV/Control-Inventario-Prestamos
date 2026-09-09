@@ -56,7 +56,7 @@ namespace LabInventario.Views
         private readonly ListBox _lstAcumulados = new() { Height = 220, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly Button _btnConfirmar = new()
         {
-            Content = "ACEPTAR (o Enter en blanco)",
+            Content = "ACEPTAR",
             Classes = { "Success" },
             Height = 45,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -84,9 +84,8 @@ namespace LabInventario.Views
 
             var lblAyuda = new TextBlock
             {
-                Text = "Escanea el carnet, luego cada material (se puede repetir el mismo\n" +
-                       "material para sumar cantidad). Para enviar la solicitud, presiona\n" +
-                       "Enter con el cuadro vacío.",
+                Text = "Escanea la identificacion, luego cada material\n" +
+                       "Para enviar la solicitud, presiona Enter con el cuadro vacío.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
             };
@@ -108,7 +107,7 @@ namespace LabInventario.Views
             var panelLista = new StackPanel { Spacing = 10 };
             panelLista.Children.Add(_lstAcumulados);
             panelLista.Children.Add(_btnConfirmar);
-            var grupoLista = Cajas.GroupBox("Lista de equipos a procesar", panelLista, 380);
+            var grupoLista = Cajas.GroupBox("Lista de equipo a procesar", panelLista, 380);
 
             // Columna izquierda (modo + captura) y derecha (lista).
             // Se usa un Grid con columnas "*" (en vez del StackPanel

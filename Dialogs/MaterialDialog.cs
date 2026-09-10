@@ -40,7 +40,7 @@ namespace LabInventario.Dialogs
             panel.Children.Add(_txtCodigo);
             panel.Children.Add(new TextBlock { Text = "Nombre del elemento:", Margin = new Avalonia.Thickness(0, 10, 0, 0) });
             panel.Children.Add(_txtNombre);
-            panel.Children.Add(new TextBlock { Text = "Cantidad total:", Margin = new Avalonia.Thickness(0, 10, 0, 0) });
+            //panel.Children.Add(new TextBlock { Text = "Cantidad total:", Margin = new Avalonia.Thickness(0, 10, 0, 0) });
             panel.Children.Add(_numTotal);
 
             if (_esEdicion)

@@ -49,7 +49,7 @@ namespace LabInventario.Services
             var extension = Path.GetExtension(ruta).ToLowerInvariant();
             return extension switch
             {
-                ".xlsx" or ".xls" => LeerExcel(ruta),
+                ".xlsx" or ".xls" or ".xlsm" => LeerExcel(ruta),
                 ".csv" or ".txt" => LeerPlano(ruta),
                 ".sql" => LeerSql(ruta),
                 ".db" or ".sqlite" or ".sqlite3" => LeerBaseDeDatos(ruta, esAlumnos ? "alumnos" : "materiales"),

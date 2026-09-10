@@ -51,7 +51,10 @@ namespace LabInventario.Views
         private readonly RadioButton _radioEntrada = new() { Content = "Entrada (devolución)", GroupName = "modo" };
 
         private readonly TextBox _txtEscaneo = new() { FontSize = 16, HorizontalAlignment = HorizontalAlignment.Stretch };
-        private readonly NumericUpDown _numCantidad = new() { Minimum = 1, Maximum = 999, Value = 1, Width = 90, FormatString = "0" };
+
+/// <summary>
+       /// private readonly NumericUpDown _numCantidad = new() { Minimum = 1, Maximum = 999, Value = 1, Width = 90, FormatString = "0" };
+       /// </summary>
 
         private readonly ListBox _lstAcumulados = new() { Height = 220, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly Button _btnConfirmar = new()
@@ -96,8 +99,8 @@ namespace LabInventario.Views
             var panelCaptura = new StackPanel { Spacing = 8 };
             panelCaptura.Children.Add(_lblEscaneo);
             panelCaptura.Children.Add(_txtEscaneo);
-            panelCaptura.Children.Add(new TextBlock { Text = "Cantidad por escaneo:" });
-            panelCaptura.Children.Add(_numCantidad);
+           // panelCaptura.Children.Add(new TextBlock { Text = "Cantidad por escaneo:" });
+            //panelCaptura.Children.Add(_numCantidad);
             panelCaptura.Children.Add(lblAyuda);
             panelCaptura.Children.Add(btnLimpiar);
             var grupoCaptura = Cajas.GroupBox("Captura (escáner)", panelCaptura, 430);
@@ -222,14 +225,14 @@ namespace LabInventario.Views
             }
 
             var existente = _listaTemporal.FirstOrDefault(i => i.Codigo == material.CodigoBarras);
-            var cantidadEscaneo = (int)(_numCantidad.Value ?? 1);
+            //var cantidadEscaneo = (int)(_numCantidad.Value ?? 1);
 
-            if (existente is not null)
-                existente.Cantidad += cantidadEscaneo;
-            else
-                _listaTemporal.Add(new ItemEscaneado { Codigo = material.CodigoBarras, Nombre = material.Nombre, Cantidad = cantidadEscaneo });
+           // if (existente is not null)
+                //existente.Cantidad += cantidadEscaneo;
+            //else
+                //_listaTemporal.Add(new ItemEscaneado { Codigo = material.CodigoBarras, Nombre = material.Nombre, Cantidad = cantidadEscaneo });
 
-            _numCantidad.Value = 1;
+            // _numCantidad.Value = 1;
             RefrescarLista();
             _lblEstado.Classes.Clear();
             _lblEstado.Classes.Add("Primary");
@@ -326,7 +329,7 @@ namespace LabInventario.Views
         private void Limpiar()
         {
             _txtEscaneo.Clear();
-            _numCantidad.Value = 1;
+            // _numCantidad.Value = 1;
             _listaTemporal.Clear();
             _itemsAcumulados.Clear();
             _alumnoActual = null;

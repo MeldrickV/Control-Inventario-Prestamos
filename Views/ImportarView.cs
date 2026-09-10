@@ -186,7 +186,7 @@ namespace LabInventario.Views
                 var nombre = fila.ElementAtOrDefault(idxNombre.Value)?.Trim() ?? "";
                 if (string.IsNullOrEmpty(codigo) || string.IsNullOrEmpty(nombre)) return "error";
 
-                var cantidad = 0;
+                var cantidad = 1;
                 if (idxCantidad is not null)
                 {
                     var valorCantidad = fila.ElementAtOrDefault(idxCantidad.Value);

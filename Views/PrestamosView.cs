@@ -107,7 +107,7 @@ namespace LabInventario.Views
                     new DataGridTextColumn { Header = "Cuenta", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Cuenta)), Width = new DataGridLength(0.9, DataGridLengthUnitType.Star), Tag = "Cuenta" },
                     new DataGridTextColumn { Header = "Material", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Material)), Width = new DataGridLength(1.3, DataGridLengthUnitType.Star), Tag = "Material" },
                     new DataGridTextColumn { Header = "Código", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Codigo)), Width = new DataGridLength(0.9, DataGridLengthUnitType.Star), Tag = "Codigo" },
-                    new DataGridTextColumn { Header = "Cant.", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Cantidad)), Width = new DataGridLength(0.5, DataGridLengthUnitType.Star), Tag = "Cantidad" },
+                  //  new DataGridTextColumn { Header = "Cant.", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Cantidad)), Width = new DataGridLength(0.5, DataGridLengthUnitType.Star), Tag = "Cantidad" },
                     new DataGridTextColumn { Header = "Fecha salida", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Salida)), Width = new DataGridLength(1.4, DataGridLengthUnitType.Star), Tag = "Salida" },
                     new DataGridTextColumn { Header = "Fecha regreso", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Regreso)), Width = new DataGridLength(1.2, DataGridLengthUnitType.Star), Tag = "Regreso" },
                     new DataGridTextColumn { Header = "Estado", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Estado)), Width = new DataGridLength(0.8, DataGridLengthUnitType.Star), Tag = "Estado" },

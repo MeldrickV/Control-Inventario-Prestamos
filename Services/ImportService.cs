@@ -28,7 +28,7 @@ namespace LabInventario.Services
     {
         // Campos que el sistema necesita para cada entidad importable.
         public static readonly string[] CamposAlumno = { "Nombre", "NumeroCuenta" };
-        public static readonly string[] CamposMaterial = { "CodigoBarras", "Nombre", "CantidadTotal" };
+        public static readonly string[] CamposMaterial = { "CodigoBarras", "Nombre", };
 
         // Patrones heurísticos: nombres de columna típicos en español/inglés
         // que suelen corresponder a cada campo del sistema.

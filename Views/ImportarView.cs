@@ -179,7 +179,7 @@ namespace LabInventario.Views
             {
                 var idxCodigo = mapeo.GetValueOrDefault("CodigoBarras");
                 var idxNombre = mapeo.GetValueOrDefault("Nombre");
-                var idxCantidad = mapeo.GetValueOrDefault("CantidadTotal");
+                //var idxCantidad = mapeo.GetValueOrDefault("CantidadTotal");
                 if (idxCodigo is null || idxNombre is null) return "error";
 
                 var codigo = fila.ElementAtOrDefault(idxCodigo.Value)?.Trim() ?? "";

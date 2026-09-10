@@ -38,7 +38,7 @@ namespace LabInventario.Views
                 {
                     new DataGridTextColumn { Header = "Código de barras", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Codigo)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
                     new DataGridTextColumn { Header = "Nombre del elemento", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Nombre)), Width = new DataGridLength(2, DataGridLengthUnitType.Star) },
-                    new DataGridTextColumn { Header = "Cant. total", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Total)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
+                    //new DataGridTextColumn { Header = "Cant. total", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Total)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
                     new DataGridTextColumn { Header = "Disponible", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Disponible)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
                 },
             };

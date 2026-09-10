@@ -179,7 +179,7 @@ namespace LabInventario.Views
             {
                 var idxCodigo = mapeo.GetValueOrDefault("CodigoBarras");
                 var idxNombre = mapeo.GetValueOrDefault("Nombre");
-                //var idxCantidad = mapeo.GetValueOrDefault("CantidadTotal");
+                var idxCantidad = mapeo.GetValueOrDefault("CantidadTotal");
                 if (idxCodigo is null || idxNombre is null) return "error";
 
                 var codigo = fila.ElementAtOrDefault(idxCodigo.Value)?.Trim() ?? "";
@@ -187,7 +187,7 @@ namespace LabInventario.Views
                 if (string.IsNullOrEmpty(codigo) || string.IsNullOrEmpty(nombre)) return "error";
 
                 var cantidad = 0;
-                if (idCantidad is not null)
+                if (idxCantidad is not null)
                 {
                     var valorCantidad = fila.ElementAtOrDefault(idxCantidad.Value);
                     if (!string.IsNullOrWhiteSpace(valorCantidad))

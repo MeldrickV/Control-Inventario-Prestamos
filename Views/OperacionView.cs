@@ -227,10 +227,10 @@ namespace LabInventario.Views
             var existente = _listaTemporal.FirstOrDefault(i => i.Codigo == material.CodigoBarras);
             //var cantidadEscaneo = (int)(_numCantidad.Value ?? 1);
 
-           // if (existente is not null)
-                //existente.Cantidad += cantidadEscaneo;
-            //else
-                //_listaTemporal.Add(new ItemEscaneado { Codigo = material.CodigoBarras, Nombre = material.Nombre, Cantidad = cantidadEscaneo });
+            if (existente is not null)
+                existente.Cantidad += 1;
+            else
+                _listaTemporal.Add(new ItemEscaneado { Codigo = material.CodigoBarras, Nombre = material.Nombre, Cantidad = 1 });
 
             // _numCantidad.Value = 1;
             RefrescarLista();

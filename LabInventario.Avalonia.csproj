@@ -66,4 +66,16 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- El proyecto de pruebas vive dentro de la carpeta del repositorio;
+         hay que decirle al glob por defecto del SDK que no arrastre sus
+         .cs (ni recursos) al compilar la aplicación. -->
+    <Compile Remove="tests\**" />
+    <AvaloniaResource Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Content Remove="tests\**" />
+    <Page Remove="tests\**" />
+  </ItemGroup>
+
 </Project>

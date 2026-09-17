@@ -17,13 +17,18 @@ namespace LabInventario.Services
         private const string PasswordPorDefecto = "admin123";
         private const int Iteraciones = 100_000;
 
-        private readonly ConfiguracionRepository _config = new();
+        private readonly ConfiguracionRepository _config;
 
-        public AuthService()
+        /// <summary>
+        /// Usa la base de datos real (<see cref="DatabaseManager.Instancia"/>)
+        /// por defecto; recibir un <see cref="DatabaseManager"/> permite
+        /// apuntar a una base temporal en las pruebas. Si es la primera vez
+        /// que corre (no hay hash guardado), siembra la contraseña por
+        /// defecto para que siempre haya un administrador capaz de entrar.
+        /// </summary>
+        public AuthService(DatabaseManager? db = null)
         {
-            // Si es la primera vez que corre la aplicación, siembra la
-            // contraseña por defecto para que siempre haya un administrador
-            // capaz de entrar.
+            _config = new ConfiguracionRepository(db);
             if (_config.Obtener(ClaveHash) is null)
                 EstablecerPasswordAdmin(PasswordPorDefecto);
         }

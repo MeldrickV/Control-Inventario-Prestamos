@@ -6,7 +6,14 @@ namespace LabInventario.Data
     /// <summary>Acceso a datos para la tabla `alumnos`. Todo el SQL de alumnos vive aquí.</summary>
     public class AlumnoRepository
     {
-        private readonly DatabaseManager _db = DatabaseManager.Instancia;
+        private readonly DatabaseManager _db;
+
+        /// <summary>
+        /// Usa la base de datos real (<see cref="DatabaseManager.Instancia"/>)
+        /// por defecto; recibir un <see cref="DatabaseManager"/> permite
+        /// apuntar a una base temporal en las pruebas.
+        /// </summary>
+        public AlumnoRepository(DatabaseManager? db = null) => _db = db ?? DatabaseManager.Instancia;
 
         public int Crear(string nombre, string numeroCuenta)
         {
@@ -40,20 +47,22 @@ namespace LabInventario.Data
             comando.ExecuteNonQuery();
         }
 
-        public Alumno? ObtenerPorCuenta(string numeroCuenta)
+        public Alumno? ObtenerPorCuenta(string numeroCuenta, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = "SELECT * FROM alumnos WHERE NumeroCuenta = $cuenta";
             comando.Parameters.AddWithValue("$cuenta", numeroCuenta);
             using var lector = comando.ExecuteReader();
             return lector.Read() ? Mapear(lector) : null;
         }
 
-        public Alumno? ObtenerPorId(int id)
+        public Alumno? ObtenerPorId(int id, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = "SELECT * FROM alumnos WHERE Id = $id";
             comando.Parameters.AddWithValue("$id", id);
             using var lector = comando.ExecuteReader();

@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using LabInventario.Data;
 using LabInventario.Dialogs;
@@ -16,11 +15,11 @@ namespace LabInventario.Views
             public int Id { get; set; }
             public string Codigo { get; set; } = "";
             public string Nombre { get; set; } = "";
-            public int Total { get; set; }
             public int Disponible { get; set; }
         }
 
         private readonly MaterialRepository _repo = new();
+        private readonly PrestamoRepository _prestamoRepo = new();
         private readonly ObservableCollection<FilaMaterial> _filas = new();
         private readonly DataGrid _grid;
         private readonly TextBox _txtFiltro = new() { Width = 260 };
@@ -38,19 +37,18 @@ namespace LabInventario.Views
                 {
                     new DataGridTextColumn { Header = "Código de barras", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Codigo)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
                     new DataGridTextColumn { Header = "Nombre del elemento", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Nombre)), Width = new DataGridLength(2, DataGridLengthUnitType.Star) },
-                    //new DataGridTextColumn { Header = "Cant. total", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Total)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
                     new DataGridTextColumn { Header = "Disponible", Binding = new Avalonia.Data.Binding(nameof(FilaMaterial.Disponible)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
                 },
             };
 
             var btnNuevo = new Button { Content = "Nuevo material", Classes = { "Flat" }, MinWidth = 130 };
-            btnNuevo.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), Nuevo);
+            btnNuevo.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Nuevo);
             
             var btnEditar = new Button { Content = "Editar", Classes = { "Outlined" }, MinWidth = 100 };
-            btnEditar.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), Editar);
+            btnEditar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Editar);
             
             var btnEliminar = new Button { Content = "Eliminar", Classes = { "Danger" }, MinWidth = 100 };
-            btnEliminar.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), Eliminar);
+            btnEliminar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Eliminar);
 
             _txtFiltro.TextChanged += (_, _) => Cargar();
 
@@ -79,18 +77,15 @@ namespace LabInventario.Views
         {
             _filas.Clear();
             foreach (var m in _repo.Listar(_txtFiltro.Text?.Trim() ?? ""))
-                _filas.Add(new FilaMaterial { Id = m.Id, Codigo = m.CodigoBarras, Nombre = m.Nombre, Total = m.CantidadTotal, Disponible = m.CantidadDisponible });
+                _filas.Add(new FilaMaterial { Id = m.Id, Codigo = m.CodigoBarras, Nombre = m.Nombre, Disponible = m.CantidadDisponible });
         }
 
         /// <summary>Recarga los datos desde la base de datos. Se llama cada vez que esta pestaña se vuelve visible.</summary>
         public void Actualizar() => Cargar();
 
-        private Window? VentanaPropietaria() =>
-            (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-
         private async Task Nuevo()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var dialogo = new MaterialDialog();
@@ -109,7 +104,7 @@ namespace LabInventario.Views
 
         private async Task Editar()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var seleccionado = _grid.SelectedItem as FilaMaterial;
@@ -136,13 +131,25 @@ namespace LabInventario.Views
 
         private async Task Eliminar()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var seleccionado = _grid.SelectedItem as FilaMaterial;
             if (seleccionado is null)
             {
                 await Dialogos.MostrarInfo(propietaria, "Elige un material de la tabla primero.", "Sin selección");
+                return;
+            }
+
+            // Un material con préstamos nunca se borra: la FK de la tabla
+            // prestamos lo impediría de todos modos, pero con este chequeo el
+            // usuario recibe un mensaje claro en vez de un error de SQLite.
+            if (_prestamoRepo.TienePrestamosDeMaterial(seleccionado.Id))
+            {
+                await Dialogos.MostrarAdvertencia(propietaria,
+                    $"No se puede eliminar el material '{seleccionado.Nombre}' porque tiene préstamos registrados. " +
+                    "Si ya no debe usarse, revisa su historial en la pestaña Historial antes de darlo de baja.",
+                    "Eliminación bloqueada");
                 return;
             }
 

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using SukiUI.Controls;
 using SukiUI.MessageBox;
@@ -64,6 +65,23 @@ namespace LabInventario.Helpers
             });
             return archivo?.TryGetLocalPath();
         }
+    }
+
+    /// <summary>
+    /// Centraliza el acceso a la ventana principal de la sesión, que en
+    /// <see cref="Avalonia"/> sirve como ventana "propietaria" para los
+    /// diálogos modales (<c>dialogo.ShowDialog(propietaria)</c> exige una).
+    ///
+    /// Antes cada vista (Alumnos, Inventario, Operación, Historial,
+    /// Importar, Exportar) duplicaba un método privado
+    /// <c>VentanaPropietaria()</c> con la misma implementación; viven aquí,
+    /// en una sola definición, para que el concepto no se copie nunca más.
+    /// </summary>
+    public static class Ventanas
+    {
+        /// <summary>Ventana principal actual de la aplicación, o null si todavía no hay una.</summary>
+        public static Window? Propietaria() =>
+            (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
     }
 
     /// <summary>

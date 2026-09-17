@@ -6,7 +6,14 @@ namespace LabInventario.Data
     // Acceso a datos para la tabla `materiales`.</summary>
     public class MaterialRepository
     {
-        private readonly DatabaseManager _db = DatabaseManager.Instancia;
+        private readonly DatabaseManager _db;
+
+        /// <summary>
+        /// Usa la base de datos real (<see cref="DatabaseManager.Instancia"/>)
+        /// por defecto; recibir un <see cref="DatabaseManager"/> permite
+        /// apuntar a una base temporal en las pruebas.
+        /// </summary>
+        public MaterialRepository(DatabaseManager? db = null) => _db = db ?? DatabaseManager.Instancia;
 
         public int Crear(string codigoBarras, string nombre, int cantidadTotal)
         {
@@ -49,20 +56,22 @@ namespace LabInventario.Data
             comando.ExecuteNonQuery();
         }
 
-        public Material? ObtenerPorCodigo(string codigoBarras)
+        public Material? ObtenerPorCodigo(string codigoBarras, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = "SELECT * FROM materiales WHERE CodigoBarras = $codigo";
             comando.Parameters.AddWithValue("$codigo", codigoBarras);
             using var lector = comando.ExecuteReader();
             return lector.Read() ? Mapear(lector) : null;
         }
 
-        public Material? ObtenerPorId(int id)
+        public Material? ObtenerPorId(int id, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = "SELECT * FROM materiales WHERE Id = $id";
             comando.Parameters.AddWithValue("$id", id);
             using var lector = comando.ExecuteReader();
@@ -95,13 +104,17 @@ namespace LabInventario.Data
         /// <summary>
         /// Suma `delta` a la cantidad disponible.
         /// delta negativo = sale material en préstamo; delta positivo = se devuelve al stock.
+        /// El SQL acota el resultado: la disponible nunca baja de 0 ni supera
+        /// la cantidad total, como red de seguridad adicional a las
+        /// validaciones de <c>PrestamoService</c>.
         /// </summary>
-        public void AjustarDisponible(int id, int delta)
+        public void AjustarDisponible(int id, int delta, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText =
-                "UPDATE materiales SET CantidadDisponible = CantidadDisponible + $delta WHERE Id = $id";
+                "UPDATE materiales SET CantidadDisponible = MIN(CantidadTotal, MAX(0, CantidadDisponible + $delta)) WHERE Id = $id";
             comando.Parameters.AddWithValue("$delta", delta);
             comando.Parameters.AddWithValue("$id", id);
             comando.ExecuteNonQuery();

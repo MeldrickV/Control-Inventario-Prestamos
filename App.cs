@@ -89,10 +89,6 @@ namespace LabInventario
 
                 SesionActual.Rol = login.RolSeleccionado;
 
-                // Limpieza automática de préstamos ya devueltos con más de
-                // una semana de antigüedad (ver PrestamoRepository.EliminarDevueltosAntiguos).
-                new Data.PrestamoRepository().EliminarDevueltosAntiguos();
-
                 var mainWindow = new MainWindow();
                 desktop.MainWindow = mainWindow;
                 mainWindow.Show();

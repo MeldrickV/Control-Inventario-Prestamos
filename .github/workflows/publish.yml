@@ -19,9 +19,9 @@ jobs:
           - rid: linux-x64
             os: ubuntu-latest
           - rid: win-x64
-            os: ubuntu-latest
+            os: windows-latest
           - rid: osx-x64
-            os: ubuntu-latest
+            os: macos-latest
 
     runs-on: ${{ matrix.os }}
 
@@ -36,9 +36,10 @@ jobs:
 
       - name: Publicar ejecutable autocontenido (${{ matrix.rid }})
         run: >
-          dotnet publish -c Release -r ${{ matrix.rid }}
+          dotnet publish LabInventario.Avalonia.csproj -c Release -r ${{ matrix.rid }}
           --self-contained true
           -p:PublishSingleFile=true
+          -p:UseAppHost=true
           -o publicado/${{ matrix.rid }}
 
       - name: Subir como artifact descargable

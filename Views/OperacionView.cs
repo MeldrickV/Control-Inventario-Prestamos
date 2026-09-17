@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -52,10 +51,6 @@ namespace LabInventario.Views
 
         private readonly TextBox _txtEscaneo = new() { FontSize = 16, HorizontalAlignment = HorizontalAlignment.Stretch };
 
-/// <summary>
-       /// private readonly NumericUpDown _numCantidad = new() { Minimum = 1, Maximum = 999, Value = 1, Width = 90, FormatString = "0" };
-       /// </summary>
-
         private readonly ListBox _lstAcumulados = new() { Height = 220, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly Button _btnConfirmar = new()
         {
@@ -99,14 +94,12 @@ namespace LabInventario.Views
             var panelCaptura = new StackPanel { Spacing = 8 };
             panelCaptura.Children.Add(_lblEscaneo);
             panelCaptura.Children.Add(_txtEscaneo);
-           // panelCaptura.Children.Add(new TextBlock { Text = "Cantidad por escaneo:" });
-            //panelCaptura.Children.Add(_numCantidad);
             panelCaptura.Children.Add(lblAyuda);
             panelCaptura.Children.Add(btnLimpiar);
             var grupoCaptura = Cajas.GroupBox("Captura (escáner)", panelCaptura, 430);
 
             // Panel: lista acumulada
-            _btnConfirmar.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), Confirmar);
+            _btnConfirmar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Confirmar);
             var panelLista = new StackPanel { Spacing = 10 };
             panelLista.Children.Add(_lstAcumulados);
             panelLista.Children.Add(_btnConfirmar);
@@ -158,7 +151,7 @@ namespace LabInventario.Views
             if (string.IsNullOrEmpty(codigo))
             {
                 if (_alumnoActual is not null && _listaTemporal.Count > 0)
-                    Errores.Ejecutar(VentanaPropietaria(), Confirmar);
+                    Errores.Ejecutar(Ventanas.Propietaria(), Confirmar);
                 _txtEscaneo.Focus();
                 return;
             }
@@ -225,14 +218,12 @@ namespace LabInventario.Views
             }
 
             var existente = _listaTemporal.FirstOrDefault(i => i.Codigo == material.CodigoBarras);
-            //var cantidadEscaneo = (int)(_numCantidad.Value ?? 1);
 
             if (existente is not null)
                 existente.Cantidad += 1;
             else
                 _listaTemporal.Add(new ItemEscaneado { Codigo = material.CodigoBarras, Nombre = material.Nombre, Cantidad = 1 });
 
-            // _numCantidad.Value = 1;
             RefrescarLista();
             _lblEstado.Classes.Clear();
             _lblEstado.Classes.Add("Primary");
@@ -246,12 +237,9 @@ namespace LabInventario.Views
                 _itemsAcumulados.Add($"{item.Nombre} [{item.Codigo}]  —  Cantidad: {item.Cantidad}");
         }
 
-        private Window? VentanaPropietaria() =>
-            (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-
         private async Task Confirmar()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
 
             if (_alumnoActual is null)
             {
@@ -270,46 +258,39 @@ namespace LabInventario.Views
             }
 
             var fechaOperacion = DateTime.Now;
-            var errores = new List<string>();
-            int exitos = 0;
-
-            foreach (var item in _listaTemporal)
-            {
-                try
-                {
-                    if (_radioSalida.IsChecked == true)
-                        _servicio.RegistrarSalida(_alumnoActual.NumeroCuenta, item.Codigo, item.Cantidad, fechaOperacion);
-                    else
-                        _servicio.RegistrarEntrada(_alumnoActual.NumeroCuenta, item.Codigo, item.Cantidad, fechaOperacion);
-
-                    exitos++;
-                }
-                catch (Exception error)
-                {
-                    // Se atrapa cualquier tipo de excepción (no solo
-                    // PrestamoException): así ningún fallo se pierde en
-                    // silencio, y si algo inesperado ocurre, el mensaje
-                    // real queda visible aquí y también en errores.log.
-                    Errores.RegistrarEnArchivo(error);
-                    errores.Add($"{item.Nombre}: {error.Message}");
-                }
-            }
-
+            var items = _listaTemporal
+                .Select(i => new LoteItem(i.Codigo, i.Cantidad))
+                .ToList();
+            var esSalida = _radioSalida.IsChecked == true;
             var alumnoNombre = _alumnoActual.Nombre;
 
-            if (exitos > 0)
-                MostrarExito($"Se registraron {exitos} equipo(s) para el alumno {alumnoNombre}.");
-
-            if (errores.Count > 0 && propietaria is not null)
+            try
             {
-                await Dialogos.MostrarAdvertencia(propietaria,
-                    "Algunos artículos no se pudieron registrar:\n\n" + string.Join("\n", errores),
-                    "Errores en el lote");
-                if (exitos == 0)
-                    MostrarError("No se registró ningún artículo. Revisa los errores mostrados.");
+                // El lote completo se registra en UNA transacción: o se
+                // guarda todo, o no se guarda nada (ver RegistrarLote).
+                var exitos = _servicio.RegistrarLote(_alumnoActual.NumeroCuenta, items, esSalida, fechaOperacion);
+                MostrarExito($"Se registraron {exitos} equipo(s) para el alumno {alumnoNombre}.");
+                Limpiar();
             }
-
-            Limpiar();
+            catch (PrestamoException error)
+            {
+                // Error de negocio esperado (stock, códigos, pendientes):
+                // se muestra y se conserva la lista sin limpiar, para que
+                // el operador pueda corregir (p. ej. escanear stock) y
+                // reintentar con Enter.
+                MostrarError(error.Message);
+                if (propietaria is not null)
+                    await Dialogos.MostrarAdvertencia(propietaria, error.Message, "No se pudo registrar el lote");
+            }
+            catch (Exception error)
+            {
+                // Fallo inesperado: se registra en errores.log y se muestra
+                // el mensaje real, también sin limpiar la lista.
+                Errores.RegistrarEnArchivo(error);
+                MostrarError(error.Message);
+                if (propietaria is not null)
+                    await Dialogos.MostrarError(propietaria, error.Message, "Ocurrió un error");
+            }
         }
 
         private void MostrarExito(string mensaje)
@@ -329,7 +310,6 @@ namespace LabInventario.Views
         private void Limpiar()
         {
             _txtEscaneo.Clear();
-            // _numCantidad.Value = 1;
             _listaTemporal.Clear();
             _itemsAcumulados.Clear();
             _alumnoActual = null;

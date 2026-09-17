@@ -30,7 +30,10 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restaurar dependencias (NuGet)
-        run: dotnet restore
+        run: dotnet restore LabInventario.sln
 
       - name: Compilar
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build LabInventario.sln --configuration Release --no-restore
+
+      - name: Ejecutar pruebas
+        run: dotnet test LabInventario.sln --configuration Release --no-build --no-restore

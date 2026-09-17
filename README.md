@@ -14,6 +14,8 @@ El sistema dispone de dos roles:
   - Gestionar alumnos.
   - Gestionar materiales e inventario.
   - Importar datos masivamente.
+  - Exportar datos y crear respaldos.
+  - Limpiar el historial de préstamos antiguos.
   - Cambiar la contraseña del administrador.
   - Configurar el patrón utilizado para identificar números de cuenta durante el escaneo.
 - **Usuario**
@@ -84,7 +86,18 @@ El sistema conserva los préstamos registrados y permite consultar información 
 - Fecha de regreso.
 - Estado del préstamo.
 
-También permite filtrar el historial y consultar únicamente préstamos activos.
+También permite filtrar el historial y consultar únicamente préstamos activos. Los préstamos activos del mismo alumno y material con varias fechas de salida se agrupan en una fila resumen expandible (devolución en orden FIFO).
+
+**El historial no se borra automáticamente**: la aplicación conserva todas las devoluciones. Si el administrador quiere depurar registros antiguos, lo hace explícitamente desde **Administración → Limpiar historial antiguo...**, indicando la antigüedad mínima (por defecto 30 días). Antes de borrar se muestra cuántos registros se eliminarán y se pide confirmación; los préstamos activos nunca se tocan.
+
+### 📤 Exportación
+
+El módulo de exportación permite sacar datos en formatos abiertos o crear respaldos de la base:
+
+- **Alumnos, inventario e historial** a `CSV` o `Excel (.xlsx)`.
+- Al exportar **historial** se puede usar el filtro vigente de la pestaña Historial y la opción "solo activos".
+- **Respaldo cifrado** (copia binaria del `.db`, sigue cifrado: solo se abre con esta app en esta misma máquina).
+- **Volcado completo** en un único `.xlsx` (una hoja por tabla, texto plano — sin cifrar, hay que manejarlo con cuidado).
 
 ### 📥 Importación masiva
 
@@ -95,6 +108,9 @@ El módulo de importación permite cargar información desde:
 - `.csv`
 - `.txt`
 - `.sql`
+- `.db`
+- `.sqlite`
+- `.sqlite3`
 
 Actualmente se pueden importar:
 
@@ -136,11 +152,13 @@ Si el patrón no permite determinar correctamente el tipo de código, la aplicac
 |---|---|
 | C# | Lenguaje principal |
 | .NET 8 | Plataforma de ejecución |
-| Avalonia UI 11.1.3 | Interfaz gráfica multiplataforma |
-| SQLite | Base de datos local |
+| Avalonia UI 11.3.14 | Interfaz gráfica multiplataforma |
+| SukiUI 6.1.1 | Tema visual sobre Avalonia |
+| SQLite + SQLCipher | Base de datos local cifrada en disco (AES-256) |
 | Microsoft.Data.Sqlite | Acceso a SQLite |
-| ClosedXML | Lectura de archivos Excel |
-| GitHub Actions | Integración y publicación automática |
+| ClosedXML | Lectura y escritura de archivos Excel (.xlsx) |
+| xUnit | Pruebas unitarias (proyecto `tests/`) |
+| GitHub Actions | Integración, pruebas y publicación automática |
 
 ## Arquitectura del proyecto
 
@@ -161,6 +179,7 @@ LabInventario
 │   ├── CambiarPasswordDialog.cs
 │   ├── CantidadDialog.cs
 │   ├── ConfiguracionEscaneoDialog.cs
+│   ├── LimpiarHistorialDialog.cs
 │   ├── MapeoColumnasDialog.cs
 │   └── MaterialDialog.cs
 │
@@ -176,6 +195,7 @@ LabInventario
 ├── Services/
 │   ├── AuthService.cs
 │   ├── DetectorPatrones.cs
+│   ├── ExportService.cs
 │   ├── ImportService.cs
 │   ├── PrestamoException.cs
 │   ├── PrestamoService.cs
@@ -183,6 +203,7 @@ LabInventario
 │
 ├── Views/
 │   ├── AlumnosView.cs
+│   ├── ExportarView.cs
 │   ├── ImportarView.cs
 │   ├── InventarioView.cs
 │   ├── OperacionView.cs
@@ -192,6 +213,9 @@ LabInventario
 │   ├── LoginWindow.cs
 │   └── MainWindow.cs
 │
+├── tests/
+│   └── LabInventario.Tests/   (pruebas xUnit)
+│
 ├── ejemplos/
 │   ├── alumnos_ejemplo.csv
 │   └── materiales_ejemplo.csv
@@ -199,7 +223,8 @@ LabInventario
 ├── App.axaml
 ├── App.cs
 ├── Program.cs
-└── LabInventario.Avalonia.csproj
+├── LabInventario.Avalonia.csproj
+└── LabInventario.sln
 ```
 
 ### Responsabilidades principales
@@ -229,11 +254,15 @@ Contiene utilidades relacionadas con la interfaz de usuario y los diálogos mult
 
 La aplicación utiliza **SQLite**, por lo que no necesita un servidor de base de datos independiente.
 
-Al iniciar por primera vez se crea automáticamente:
+Al iniciar por primera vez se crea automáticamente el archivo `laboratorio.db` **cifrado con SQLCipher (AES-256)**, en la carpeta de datos de la aplicación:
 
-```text
-data/laboratorio.db
-```
+- Windows: `%LOCALAPPDATA%\LabInventario`.
+- Linux: `$XDG_DATA_HOME/LabInventario` (o `~/.local/share/LabInventario`).
+- macOS: `~/Library/Application Support/LabInventario`.
+
+Si ya existe una carpeta portable `data/` junto al ejecutable (instalaciones previas de la versión portable), la aplicación la sigue usando por continuidad en lugar de crear datos nuevos en la carpeta del usuario.
+
+La clave de cifrado se deriva de un secreto embebido en el binario combinado con un identificador propio de la máquina. Por eso un archivo `.db` copiado a otra computadora (o abierto con herramientas genéricas como DB Browser for SQLite) no se puede leer: solo esta app, en la máquina donde se cifró, puede abrirlo.
 
 El esquema incluye las siguientes tablas:
 
@@ -379,7 +408,7 @@ Windows
 macOS
 ```
 
-El workflow restaura las dependencias y ejecuta una compilación de Release.
+El workflow restaura las dependencias, compila en Release y ejecuta las **pruebas unitarias** del proyecto `tests/` (que cubren el servicio de préstamos, repositorios, autenticación, importación, exportación y detección de patrones).
 
 ### `publish.yml`
 
@@ -449,6 +478,9 @@ El proyecto incorpora varias medidas para mantener consistencia en las operacion
 - Hash y salt para la contraseña del administrador.
 - Validación del patrón de expresiones regulares antes de guardarlo.
 - Actualización del inventario al registrar salidas y devoluciones.
+- Base de datos cifrada en disco (SQLCipher, AES-256) y asociada a la máquina.
+- Exportaciones planas (CSV/XLSX) siempre fuera del cifrado, señaladas como tales al usuario.
+- Historial conservado sin purga automática; el borrado de registros antiguos es manual y requiere confirmación.
 
 ## Estructura conceptual
 
@@ -490,6 +522,6 @@ El flujo principal de la aplicación puede resumirse así:
 
 ## Estado del proyecto
 
-El proyecto está estructurado como una aplicación de escritorio multiplataforma basada en **Avalonia UI + .NET 8**, con persistencia local mediante SQLite y automatización de compilación/publicación mediante GitHub Actions.
+El proyecto está estructurado como una aplicación de escritorio multiplataforma basada en **Avalonia UI + .NET 8**, con persistencia local mediante SQLite cifrado, pruebas unitarias con xUnit y automatización de compilación/pruebas/publicación mediante GitHub Actions.
 
 La interfaz y la lógica están separadas en ventanas, vistas, diálogos, servicios, repositorios y modelos para facilitar el mantenimiento y futuras modificaciones.

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using LabInventario.Models;
 
@@ -6,12 +7,20 @@ namespace LabInventario.Data
     // Acceso a datos para la tabla `prestamos`, incluida la consulta combinada para reportes.
     public class PrestamoRepository
     {
-        private readonly DatabaseManager _db = DatabaseManager.Instancia;
+        private readonly DatabaseManager _db;
 
-        public int Crear(int alumnoId, int materialId, int cantidad, DateTime fechaSalida)
+        /// <summary>
+        /// Usa la base de datos real (<see cref="DatabaseManager.Instancia"/>)
+        /// por defecto; recibir un <see cref="DatabaseManager"/> permite
+        /// apuntar a una base temporal en las pruebas.
+        /// </summary>
+        public PrestamoRepository(DatabaseManager? db = null) => _db = db ?? DatabaseManager.Instancia;
+
+        public int Crear(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = @"
                 INSERT INTO prestamos (AlumnoId, MaterialId, Cantidad, FechaSalida, Estado)
                 VALUES ($alumnoId, $materialId, $cantidad, $fecha, 'Activo');
@@ -23,10 +32,11 @@ namespace LabInventario.Data
             return Convert.ToInt32((long)comando.ExecuteScalar()!);
         }
 
-        public void MarcarDevuelto(int idPrestamo, DateTime fechaRegreso)
+        public void MarcarDevuelto(int idPrestamo, DateTime fechaRegreso, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText =
                 "UPDATE prestamos SET FechaRegreso = $fecha, Estado = 'Devuelto' WHERE Id = $id";
             comando.Parameters.AddWithValue("$fecha", fechaRegreso.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -39,10 +49,11 @@ namespace LabInventario.Data
         /// parcial): el registro sigue "Activo", con su misma fecha de
         /// salida original, pero con menos unidades pendientes.
         /// </summary>
-        public void ActualizarCantidad(int idPrestamo, int nuevaCantidad)
+        public void ActualizarCantidad(int idPrestamo, int nuevaCantidad, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = "UPDATE prestamos SET Cantidad = $cantidad WHERE Id = $id";
             comando.Parameters.AddWithValue("$cantidad", nuevaCantidad);
             comando.Parameters.AddWithValue("$id", idPrestamo);
@@ -60,10 +71,11 @@ namespace LabInventario.Data
         /// FechaRegreso de este momento — así la devolución parcial deja
         /// rastro en vez de perderse dentro del préstamo activo restante.
         /// </summary>
-        public int CrearDevuelto(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, DateTime fechaRegreso)
+        public int CrearDevuelto(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, DateTime fechaRegreso, SqliteConnection? conexion = null)
         {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = @"
                 INSERT INTO prestamos (AlumnoId, MaterialId, Cantidad, FechaSalida, FechaRegreso, Estado)
                 VALUES ($alumnoId, $materialId, $cantidad, $fechaSalida, $fechaRegreso, 'Devuelto');
@@ -76,36 +88,40 @@ namespace LabInventario.Data
             return Convert.ToInt32((long)comando.ExecuteScalar()!);
         }
 
-        public void Eliminar(int idPrestamo)
+        /// <summary>
+        /// Indica si un alumno tiene algún préstamo registrado (activo o ya
+        /// devuelto). Se usa antes de eliminar: la FK de `prestamos` impide
+        /// borrar quien tenga historial, así que la interfaz debe impedirlo
+        /// con un mensaje claro.
+        /// </summary>
+        public bool TienePrestamosDeAlumno(int alumnoId)
         {
             using var conexion = _db.ObtenerConexion();
             using var comando = conexion.CreateCommand();
-            comando.CommandText = "DELETE FROM prestamos WHERE Id = $id";
-            comando.Parameters.AddWithValue("$id", idPrestamo);
-            comando.ExecuteNonQuery();
+            comando.CommandText = "SELECT 1 FROM prestamos WHERE AlumnoId = $id LIMIT 1";
+            comando.Parameters.AddWithValue("$id", alumnoId);
+            using var lector = comando.ExecuteReader();
+            return lector.Read();
         }
 
-        public Prestamo? ObtenerPorId(int idPrestamo)
+        /// <summary>Igual que <see cref="TienePrestamosDeAlumno"/>, pero para materiales.</summary>
+        public bool TienePrestamosDeMaterial(int materialId)
         {
             using var conexion = _db.ObtenerConexion();
             using var comando = conexion.CreateCommand();
+            comando.CommandText = "SELECT 1 FROM prestamos WHERE MaterialId = $id LIMIT 1";
+            comando.Parameters.AddWithValue("$id", materialId);
+            using var lector = comando.ExecuteReader();
+            return lector.Read();
+        }
+
+        public Prestamo? ObtenerPorId(int idPrestamo, SqliteConnection? conexion = null)
+        {
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = "SELECT * FROM prestamos WHERE Id = $id";
             comando.Parameters.AddWithValue("$id", idPrestamo);
-            using var lector = comando.ExecuteReader();
-            return lector.Read() ? Mapear(lector) : null;
-        }
-
-        // Localiza el préstamo activo más reciente de un alumno para un material dado.
-        public Prestamo? BuscarActivo(int alumnoId, int materialId)
-        {
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
-            comando.CommandText = @"
-                SELECT * FROM prestamos
-                WHERE AlumnoId = $alumnoId AND MaterialId = $materialId AND Estado = 'Activo'
-                ORDER BY FechaSalida DESC LIMIT 1";
-            comando.Parameters.AddWithValue("$alumnoId", alumnoId);
-            comando.Parameters.AddWithValue("$materialId", materialId);
             using var lector = comando.ExecuteReader();
             return lector.Read() ? Mapear(lector) : null;
         }
@@ -115,11 +131,12 @@ namespace LabInventario.Data
         /// ordenados del más antiguo al más reciente (orden FIFO: el que
         /// salió primero es el primero en saldarse al devolver).
         /// </summary>
-        public List<Prestamo> ListarActivosPorAlumnoYMaterial(int alumnoId, int materialId)
+        public List<Prestamo> ListarActivosPorAlumnoYMaterial(int alumnoId, int materialId, SqliteConnection? conexion = null)
         {
             var resultado = new List<Prestamo>();
-            using var conexion = _db.ObtenerConexion();
-            using var comando = conexion.CreateCommand();
+            using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
+            var con = conexion ?? conexionPropia!;
+            using var comando = con.CreateCommand();
             comando.CommandText = @"
                 SELECT * FROM prestamos
                 WHERE AlumnoId = $alumnoId AND MaterialId = $materialId AND Estado = 'Activo'
@@ -176,15 +193,24 @@ namespace LabInventario.Data
                     MaterialNombre = lector.GetString(lector.GetOrdinal("MaterialNombre")),
                     CodigoBarras = lector.GetString(lector.GetOrdinal("CodigoBarras")),
                     Cantidad = lector.GetInt32(lector.GetOrdinal("Cantidad")),
-                    FechaSalida = DateTime.Parse(lector.GetString(lector.GetOrdinal("FechaSalida"))),
+                    FechaSalida = ParsearFecha(lector.GetString(lector.GetOrdinal("FechaSalida"))),
                     FechaRegreso = lector.IsDBNull(lector.GetOrdinal("FechaRegreso"))
                         ? null
-                        : DateTime.Parse(lector.GetString(lector.GetOrdinal("FechaRegreso"))),
+                        : ParsearFecha(lector.GetString(lector.GetOrdinal("FechaRegreso"))),
                     Estado = lector.GetString(lector.GetOrdinal("Estado")),
                 });
             }
             return resultado;
         }
+
+        /// <summary>
+        /// Convierte una fecha guardada en formato fijo "yyyy-MM-dd HH:mm:ss"
+        /// de vuelta a <see cref="DateTime"/>. Se usa cultura invariable: los
+        /// datos se escriben siempre con ese formato y así se leen, sin que
+        /// el ajuste regional de la máquina cambie el resultado del parseo.
+        /// </summary>
+        private static DateTime ParsearFecha(string texto) =>
+            DateTime.ParseExact(texto, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
         private static Prestamo Mapear(SqliteDataReader lector) => new()
         {
@@ -192,25 +218,45 @@ namespace LabInventario.Data
             AlumnoId = lector.GetInt32(lector.GetOrdinal("AlumnoId")),
             MaterialId = lector.GetInt32(lector.GetOrdinal("MaterialId")),
             Cantidad = lector.GetInt32(lector.GetOrdinal("Cantidad")),
-            FechaSalida = DateTime.Parse(lector.GetString(lector.GetOrdinal("FechaSalida"))),
+            FechaSalida = ParsearFecha(lector.GetString(lector.GetOrdinal("FechaSalida"))),
             FechaRegreso = lector.IsDBNull(lector.GetOrdinal("FechaRegreso"))
                 ? null
-                : DateTime.Parse(lector.GetString(lector.GetOrdinal("FechaRegreso"))),
+                : ParsearFecha(lector.GetString(lector.GetOrdinal("FechaRegreso"))),
             Estado = lector.GetString(lector.GetOrdinal("Estado")) == "Activo"
                 ? EstadoPrestamo.Activo
                 : EstadoPrestamo.Devuelto,
         };
 
         /// <summary>
-        /// Borra los préstamos ya devueltos con más de <paramref name="dias"/>
-        /// días de antigüedad (contados desde su FechaRegreso). Se llama
-        /// automáticamente al entrar a la pestaña de Historial y al iniciar
-        /// sesión, así el historial de devoluciones queda disponible un
-        /// tiempo prudente para revisión (por ejemplo, si algo se regresó
-        /// dañado y hay que saber quién y cuándo) sin acumularse para
-        /// siempre.
+        /// Cuenta los préstamos ya devueltos con más de <paramref name="dias"/>
+        /// días de antigüedad (contados desde su fecha de regreso). Se usa
+        /// antes de <see cref="EliminarDevueltosAntiguos"/> para que el
+        /// administrador sepa cuántos registros se van a borrar.
         /// </summary>
-        public int EliminarDevueltosAntiguos(int dias = 7)
+        public int ContarDevueltosAntiguos(int dias)
+        {
+            var limite = DateTime.Now.AddDays(-dias);
+            using var conexion = _db.ObtenerConexion();
+            using var comando = conexion.CreateCommand();
+            comando.CommandText = @"
+                SELECT COUNT(*) FROM prestamos
+                WHERE Estado = 'Devuelto'
+                  AND FechaRegreso IS NOT NULL
+                  AND FechaRegreso < $limite";
+            comando.Parameters.AddWithValue("$limite", limite.ToString("yyyy-MM-dd HH:mm:ss"));
+            return Convert.ToInt32((long)comando.ExecuteScalar()!);
+        }
+
+        /// <summary>
+        /// Borra los préstamos ya devueltos con más de <paramref name="dias"/>
+        /// días de antigüedad (contados desde su fecha de regreso). Este
+        /// borrado es SOLO manual: la aplicación ya no purga el historial
+        /// sola. Si el administrador quiere depurar registros antiguos lo
+        /// hace explícitamente desde "Administración &gt; Limpiar historial
+        /// antiguo...", que primero muestra cuántos se eliminarán (ver
+        /// <see cref="ContarDevueltosAntiguos"/>) y pide confirmación.
+        /// </summary>
+        public int EliminarDevueltosAntiguos(int dias = 30)
         {
             var limite = DateTime.Now.AddDays(-dias);
             using var conexion = _db.ObtenerConexion();

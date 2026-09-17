@@ -10,7 +10,14 @@ namespace LabInventario.Data
     /// </summary>
     public class ConfiguracionRepository
     {
-        private readonly DatabaseManager _db = DatabaseManager.Instancia;
+        private readonly DatabaseManager _db;
+
+        /// <summary>
+        /// Usa la base de datos real (<see cref="DatabaseManager.Instancia"/>)
+        /// por defecto; recibir un <see cref="DatabaseManager"/> permite
+        /// apuntar a una base temporal en las pruebas.
+        /// </summary>
+        public ConfiguracionRepository(DatabaseManager? db = null) => _db = db ?? DatabaseManager.Instancia;
 
         public string? Obtener(string clave)
         {

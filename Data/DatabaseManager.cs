@@ -28,8 +28,9 @@ namespace LabInventario.Data
     /// ESA MISMA MÁQUINA podría reconstruirla. Lo que sí logra es cerrar los
     /// dos vectores más comunes: (1) abrir laboratorio.db con herramientas
     /// genéricas (DB Browser for SQLite, un editor hexadecimal, etc.) solo
-    /// por tener acceso a la carpeta del proyecto, y (2) copiar la carpeta
-    /// "data" a otra computadora y abrirla ahí, incluso con el mismo .exe.
+    /// por tener acceso a la carpeta de datos de la aplicación, y (2) copiar
+    /// esa carpeta a otra computadora y abrirla ahí, incluso con el mismo
+    /// programa.
     /// </summary>
     public sealed class DatabaseManager
     {
@@ -45,12 +46,96 @@ namespace LabInventario.Data
 
         public string DbPath { get; }
 
-        private DatabaseManager()
+        /// <summary>
+        /// Crea una instancia que trabaja sobre la carpeta de datos dada, o
+        /// sobre la carpeta predeterminada de la aplicación si no se pasa
+        /// una. El constructor es público para permitir apuntar a una base
+        /// temporal en pruebas (<c>new DatabaseManager(rutaTemp)</c>); la
+        /// aplicación en sí siempre usa la <see cref="Instancia"/> singleton.
+        /// </summary>
+        public DatabaseManager(string? rutaBase = null)
         {
-            var carpetaDatos = Path.Combine(AppContext.BaseDirectory, "data");
+            var carpetaDatos = rutaBase ?? ObtenerCarpetaDatosPredeterminada();
             Directory.CreateDirectory(carpetaDatos);
             DbPath = Path.Combine(carpetaDatos, "laboratorio.db");
             CrearEsquema();
+        }
+
+        /// <summary>
+        /// Carpeta donde se guardan el archivo .db y el respaldo de ID de
+        /// máquina.
+        ///
+        /// Elección: si ya existe una carpeta portable "data" con contenido
+        /// junto al ejecutable, se sigue usando (continuidad para
+        /// instalaciones previas); si no existe, los datos viven en la
+        /// carpeta de datos del usuario del sistema operativo (ver
+        /// <see cref="ObtenerCarpetaDatosUsuario"/>): no requiere permisos de
+        /// administración para escribir, se mantiene al actualizar o
+        /// reemplazar el programa, y es la ruta que Avalonia y las
+        /// plataformas recomiendan para datos de aplicación.
+        /// </summary>
+        private static string ObtenerCarpetaDatosPredeterminada()
+        {
+            var carpetaPortable = Path.Combine(AppContext.BaseDirectory, "data");
+            if (Directory.Exists(carpetaPortable) && Directory.EnumerateFileSystemEntries(carpetaPortable).Any())
+                return carpetaPortable;
+
+            return ObtenerCarpetaDatosUsuario();
+        }
+
+        /// <summary>
+        /// Carpeta de datos específica del usuario según el sistema
+        /// operativo. En Windows es %LOCALAPPDATA%\LabInventario; en Linux
+        /// $XDG_DATA_HOME/LabInventario (o ~/.local/share/LabInventario) y
+        /// en macOS ~/Library/Application Support/LabInventario.
+        /// </summary>
+        private static string ObtenerCarpetaDatosUsuario()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                var raiz = string.IsNullOrWhiteSpace(home) ? "/" : home;
+                return Path.Combine(raiz, "Library", "Application Support", "LabInventario");
+            }
+
+            // Windows (%LOCALAPPDATA%) y Linux ($XDG_DATA_HOME o ~/.local/share).
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(localAppData))
+                return Path.Combine(localAppData, "LabInventario");
+
+            var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+            if (!string.IsNullOrWhiteSpace(xdg))
+                return Path.Combine(xdg, "LabInventario");
+
+            return Path.Combine(Path.GetTempPath(), "LabInventario");
+        }
+
+        /// <summary>
+        /// Ejecuta <paramref name="cuerpo"/> dentro de UNA transacción:
+        /// abre una conexión, inicia BEGIN, invoca el cuerpo pasándole la
+        /// conexión abierta, y hace COMMIT al terminar. Si el cuerpo lanza
+        /// cualquier excepción, se hace ROLLBACK (nada de lo escrito se
+        /// conserva) y la excepción se re-lanza.
+        /// </summary>
+        /// <remarks>
+        /// Los repositorios deben recibir esta conexión por parámetro para
+        /// que sus escrituras queden dentro de la transacción (ver los
+        /// overloads con <c>SqliteConnection?</c> de cada repositorio).
+        /// </remarks>
+        public void EjecutarTransaccion(Action<SqliteConnection> cuerpo)
+        {
+            using var conexion = ObtenerConexion();
+            using var transaccion = conexion.BeginTransaction();
+            try
+            {
+                cuerpo(conexion);
+                transaccion.Commit();
+            }
+            catch
+            {
+                transaccion.Rollback();
+                throw;
+            }
         }
 
         /// <summary>Abre y devuelve una nueva conexión lista para usarse (cifrada, con foreign keys activas).</summary>
@@ -149,7 +234,10 @@ namespace LabInventario.Data
 
         private static string ObtenerIdRespaldo()
         {
-            var carpetaDatos = Path.Combine(AppContext.BaseDirectory, "data");
+            // Misma carpeta que el .db (ver ObtenerCarpetaDatosPredeterminada):
+            // si los datos son portables, el ID viaja con ellos; si viven en
+            // la carpeta del usuario, el ID queda ahí también.
+            var carpetaDatos = ObtenerCarpetaDatosPredeterminada();
             Directory.CreateDirectory(carpetaDatos);
             var rutaId = Path.Combine(carpetaDatos, ".machine-id-respaldo");
 

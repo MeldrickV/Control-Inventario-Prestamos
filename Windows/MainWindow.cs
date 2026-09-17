@@ -4,7 +4,9 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform;
+using LabInventario.Data;
 using LabInventario.Dialogs;
+using LabInventario.Helpers;
 using LabInventario.Services;
 using LabInventario.Theme;
 using LabInventario.Views;
@@ -40,6 +42,15 @@ namespace LabInventario.Windows
         /// </summary>
         public bool SolicitoCerrarSesion { get; private set; }
 
+        /// <summary>
+        /// Única instancia de la pestaña de Historial. Vive como campo, no
+        /// como variable local del constructor, porque la necesita el menú
+        /// "Limpiar historial antiguo..." (para recargar la tabla después de
+        /// borrar) y la pestaña de Exportar (para conocer el filtro y la
+        /// opción "solo activos" vigentes al exportar el historial).
+        /// </summary>
+        private readonly PrestamosView _historial = new();
+
         public MainWindow()
         {
             var esAdmin = SesionActual.EsAdministrador;
@@ -61,14 +72,14 @@ namespace LabInventario.Windows
             var tabs = new TabControl();
 
             tabs.Items.Add(new TabItem { Header = "Operación", Content = new OperacionView() });
-            tabs.Items.Add(new TabItem { Header = "Historial", Content = new PrestamosView() });
+            tabs.Items.Add(new TabItem { Header = "Historial", Content = _historial });
 
             if (esAdmin)
             {
                 tabs.Items.Add(new TabItem { Header = "Inventario", Content = new InventarioView() });
                 tabs.Items.Add(new TabItem { Header = "Alumnos", Content = new AlumnosView() });
                 tabs.Items.Add(new TabItem { Header = "Importar datos", Content = new ImportarView() });
-                tabs.Items.Add(new TabItem { Header = "Exportar datos", Content = new ExportarView() });
+                tabs.Items.Add(new TabItem { Header = "Exportar datos", Content = new ExportarView(_historial) });
             }
 
             tabs.SelectionChanged += (_, _) =>
@@ -77,8 +88,8 @@ namespace LabInventario.Windows
                     alumnosView.Actualizar();
                 else if (tabs.SelectedItem is TabItem { Content: InventarioView inventarioView })
                     inventarioView.Actualizar();
-                else if (tabs.SelectedItem is TabItem { Content: PrestamosView prestamosView })
-                    prestamosView.Actualizar();
+                else if (tabs.SelectedItem is TabItem { Content: PrestamosView })
+                    _historial.Actualizar();
             };
 
             // Listón institucional: una franja delgada azul→dorado justo
@@ -167,9 +178,39 @@ namespace LabInventario.Windows
                     await dialogo.ShowDialog(this);
                 };
 
+                var itemLimpiarHistorial = new MenuItem { Header = "Limpiar historial antiguo..." };
+                itemLimpiarHistorial.Click += async (_, _) =>
+                {
+                    var dialogo = new LimpiarHistorialDialog();
+                    await dialogo.ShowDialog(this);
+                    if (dialogo.DiasRetencion is not int dias) return;
+
+                    var repo = new PrestamoRepository();
+                    var aLimpiar = repo.ContarDevueltosAntiguos(dias);
+                    if (aLimpiar == 0)
+                    {
+                        await Dialogos.MostrarInfo(this,
+                            $"No hay préstamos devueltos con más de {dias} días de antigüedad desde su fecha de regreso.",
+                            "Nada que limpiar");
+                        return;
+                    }
+
+                    var confirmar = await Dialogos.Confirmar(this,
+                        $"Se borrarán {aLimpiar} préstamo(s) devuelto(s) con más de {dias} días de antigüedad. " +
+                        "Esta acción no se puede deshacer.\n\n¿Continuar?",
+                        "Confirmar limpieza del historial");
+                    if (!confirmar) return;
+
+                    var eliminados = repo.EliminarDevueltosAntiguos(dias);
+                    _historial.Actualizar();
+                    await Dialogos.MostrarInfo(this,
+                        $"Historial limpiado: {eliminados} registro(s) eliminado(s).", "Listo");
+                };
+
                 var menuAdmin = new MenuItem { Header = "Administración" };
                 menuAdmin.Items.Add(itemPassword);
                 menuAdmin.Items.Add(itemConfigEscaneo);
+                menuAdmin.Items.Add(itemLimpiarHistorial);
                 items.Add(menuAdmin);
             }
 

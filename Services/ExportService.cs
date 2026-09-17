@@ -19,9 +19,25 @@ namespace LabInventario.Services
     /// </summary>
     public class ExportService
     {
-        private readonly AlumnoRepository _alumnoRepo = new();
-        private readonly MaterialRepository _materialRepo = new();
-        private readonly PrestamoRepository _prestamoRepo = new();
+        private readonly DatabaseManager _db;
+        private readonly AlumnoRepository _alumnoRepo;
+        private readonly MaterialRepository _materialRepo;
+        private readonly PrestamoRepository _prestamoRepo;
+
+        /// <summary>
+        /// Por defecto todo apunta a la base de datos real
+        /// (<see cref="DatabaseManager.Instancia"/>). Inyectar un
+        /// <see cref="DatabaseManager"/> (o repos concretos) permite apuntar
+        /// a una base temporal en las pruebas.
+        /// </summary>
+        public ExportService(DatabaseManager? db = null, AlumnoRepository? alumnoRepo = null,
+            MaterialRepository? materialRepo = null, PrestamoRepository? prestamoRepo = null)
+        {
+            _db = db ?? DatabaseManager.Instancia;
+            _alumnoRepo = alumnoRepo ?? new AlumnoRepository(_db);
+            _materialRepo = materialRepo ?? new MaterialRepository(_db);
+            _prestamoRepo = prestamoRepo ?? new PrestamoRepository(_db);
+        }
 
         // ---------------- Alumnos ----------------
         private static readonly string[] EncabezadosAlumnos = { "Id", "Nombre", "NumeroCuenta" };
@@ -47,16 +63,19 @@ namespace LabInventario.Services
         private static readonly string[] EncabezadosHistorial =
             { "Id", "Alumno", "NumeroCuenta", "Material", "CodigoBarras", "Cantidad", "FechaSalida", "FechaRegreso", "Estado" };
 
-        private IEnumerable<string?[]> FilasHistorial() =>
-            _prestamoRepo.ListarDetallado().Select(p => new string?[]
+        private IEnumerable<string?[]> FilasHistorial(string filtro = "", bool soloActivos = false) =>
+            _prestamoRepo.ListarDetallado(filtro, soloActivos).Select(p => new string?[]
             {
                 p.Id.ToString(), p.AlumnoNombre, p.NumeroCuenta, p.MaterialNombre, p.CodigoBarras,
                 p.Cantidad.ToString(), p.FechaSalida.ToString("yyyy-MM-dd HH:mm"),
                 p.FechaRegreso?.ToString("yyyy-MM-dd HH:mm") ?? "", p.Estado,
             });
 
-        public void ExportarHistorialCsv(string ruta) => EscribirCsv(ruta, EncabezadosHistorial, FilasHistorial());
-        public void ExportarHistorialXlsx(string ruta) => EscribirXlsx(ruta, "Historial", EncabezadosHistorial, FilasHistorial());
+        public void ExportarHistorialCsv(string ruta, string filtro = "", bool soloActivos = false) =>
+            EscribirCsv(ruta, EncabezadosHistorial, FilasHistorial(filtro, soloActivos));
+
+        public void ExportarHistorialXlsx(string ruta, string filtro = "", bool soloActivos = false) =>
+            EscribirXlsx(ruta, "Historial", EncabezadosHistorial, FilasHistorial(filtro, soloActivos));
 
         // ---------------- Base de datos completa ----------------
 
@@ -67,7 +86,7 @@ namespace LabInventario.Services
         /// en esta misma máquina.
         /// </summary>
         public void ExportarBaseDatosCifrada(string rutaDestino) =>
-            File.Copy(DatabaseManager.Instancia.DbPath, rutaDestino, overwrite: true);
+            File.Copy(_db.DbPath, rutaDestino, overwrite: true);
 
         /// <summary>
         /// Vuelca las tres tablas a un único .xlsx (una hoja por tabla), en

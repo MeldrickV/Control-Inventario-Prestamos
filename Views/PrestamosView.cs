@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Layout;
@@ -67,7 +66,7 @@ namespace LabInventario.Views
         private readonly CheckBox _chkSoloActivos = new() { Content = "Mostrar solo préstamos activos" };
 
         // Clave de la columna por la que se ordena actualmente ("Alumno",
-        // "Cuenta", "Material", "Codigo", "Cantidad", "Salida", "Regreso",
+        // "Cuenta", "Material", "Codigo", "Salida", "Regreso",
         // "Estado") y si el orden es descendente. Por defecto: más
         // reciente primero, igual que el comportamiento original.
         private string _columnaOrden = "Salida";
@@ -107,7 +106,6 @@ namespace LabInventario.Views
                     new DataGridTextColumn { Header = "Cuenta", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Cuenta)), Width = new DataGridLength(0.9, DataGridLengthUnitType.Star), Tag = "Cuenta" },
                     new DataGridTextColumn { Header = "Material", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Material)), Width = new DataGridLength(1.3, DataGridLengthUnitType.Star), Tag = "Material" },
                     new DataGridTextColumn { Header = "Código", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Codigo)), Width = new DataGridLength(0.9, DataGridLengthUnitType.Star), Tag = "Codigo" },
-                  //  new DataGridTextColumn { Header = "Cant.", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Cantidad)), Width = new DataGridLength(0.5, DataGridLengthUnitType.Star), Tag = "Cantidad" },
                     new DataGridTextColumn { Header = "Fecha salida", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Salida)), Width = new DataGridLength(1.4, DataGridLengthUnitType.Star), Tag = "Salida" },
                     new DataGridTextColumn { Header = "Fecha regreso", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Regreso)), Width = new DataGridLength(1.2, DataGridLengthUnitType.Star), Tag = "Regreso" },
                     new DataGridTextColumn { Header = "Estado", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Estado)), Width = new DataGridLength(0.8, DataGridLengthUnitType.Star), Tag = "Estado" },
@@ -126,7 +124,7 @@ namespace LabInventario.Views
             _chkSoloActivos.PropertyChanged += (_, e) => { if (e.Property == ToggleButton.IsCheckedProperty) Cargar(); };
 
             var btnDevolver = new Button { Content = "Marcar como devuelto", Classes = { "Flat" }, MinWidth = 180 };
-            btnDevolver.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), MarcarDevuelto);
+            btnDevolver.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), MarcarDevuelto);
 
             var lblAyuda = new TextBlock
             {
@@ -160,17 +158,21 @@ namespace LabInventario.Views
 
         /// <summary>
         /// Recarga los datos desde la base de datos. Se llama cada vez que
-        /// esta pestaña se vuelve visible. De paso, purga los préstamos ya
-        /// devueltos con más de 7 días de antigüedad (ver
-        /// <see cref="PrestamoRepository.EliminarDevueltosAntiguos"/>): así
-        /// el historial de devoluciones queda disponible el tiempo
-        /// suficiente para revisarlo, sin acumularse indefinidamente.
+        /// esta pestaña se vuelve visible. El historial completo se conserva
+        /// sin borrar nada automáticamente: si el administrador quiere
+        /// depurar registros antiguos lo hace a mano desde "Administración
+        /// &gt; Limpiar historial antiguo...".
         /// </summary>
         public void Actualizar()
         {
-            _repo.EliminarDevueltosAntiguos();
             Cargar();
         }
+
+        /// <summary>Texto de búsqueda vigente en esta pestaña (sin espacios sobrantes). Se usa al exportar el historial si la opción "usar filtro" está activa.</summary>
+        public string FiltroActual => _txtFiltro.Text?.Trim() ?? "";
+
+        /// <summary>Si esta pestaña está mostrando solo los préstamos activos. Se usa al exportar el historial.</summary>
+        public bool SoloActivosActual => _chkSoloActivos.IsChecked == true;
 
         /// <summary>
         /// Maneja el clic en un encabezado de columna: alterna la
@@ -238,7 +240,6 @@ namespace LabInventario.Views
                 "Cuenta" => Ordenar(devueltosBase, p => p.NumeroCuenta),
                 "Material" => Ordenar(devueltosBase, p => p.MaterialNombre),
                 "Codigo" => Ordenar(devueltosBase, p => p.CodigoBarras),
-                "Cantidad" => Ordenar(devueltosBase, p => p.Cantidad),
                 "Regreso" => Ordenar(devueltosBase, p => p.FechaRegreso ?? p.FechaSalida),
                 "Estado" => Ordenar(devueltosBase, p => p.Estado),
                 _ => Ordenar(devueltosBase, p => p.FechaSalida), // "Salida" (por defecto)
@@ -266,7 +267,6 @@ namespace LabInventario.Views
                 "Cuenta" => Ordenar(gruposBase, g => g.Cuenta),
                 "Material" => Ordenar(gruposBase, g => g.Material),
                 "Codigo" => Ordenar(gruposBase, g => g.Codigo),
-                "Cantidad" => Ordenar(gruposBase, g => g.Total),
                 _ => Ordenar(gruposBase, g => g.UltimaSalida), // "Salida"/"Regreso"/"Estado": los activos no tienen fecha de regreso ni distintos estados, se cae a la fecha de salida
             };
 
@@ -365,12 +365,9 @@ namespace LabInventario.Views
             Cargar();
         }
 
-        private Window? VentanaPropietaria() =>
-            (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-
         private async Task MarcarDevuelto()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var seleccionado = _grid.SelectedItem as FilaPrestamo;

@@ -176,17 +176,31 @@ namespace LabInventario.Services
 
         private static List<string> DividirLinea(string linea, char separador)
         {
-            // Split simple respetando comillas dobles, suficiente para archivos exportados
-            // desde Excel/hojas de cálculo comunes.
+            // Split simple respetando comillas dobles, suficiente para archivos
+            // exportados desde Excel/hojas de cálculo comunes y compatible con
+            // lo que escribe ExportService.EscaparCsv (incluido el escape de
+            // comillas dobles internas como "" dentro de un campo entre comillas,
+            // para que un dato redondo exportado→importado no se rompa).
             var resultado = new List<string>();
             var actual = new StringBuilder();
             bool dentroComillas = false;
 
-            foreach (var c in linea)
+            for (int i = 0; i < linea.Length; i++)
             {
+                var c = linea[i];
                 if (c == '"')
                 {
-                    dentroComillas = !dentroComillas;
+                    // Comilla escapada "" dentro de un campo entre comillas:
+                    // representa UNA comilla literal, no cierra el campo.
+                    if (dentroComillas && i + 1 < linea.Length && linea[i + 1] == '"')
+                    {
+                        actual.Append('"');
+                        i++; // saltar la comilla ya consumida
+                    }
+                    else
+                    {
+                        dentroComillas = !dentroComillas;
+                    }
                 }
                 else if (c == separador && !dentroComillas)
                 {
@@ -273,7 +287,7 @@ namespace LabInventario.Services
                     for (int i = 0; i < headers.Count; i++)
                     {
                         if (columnasUsadas.Contains(i)) continue;
-                        if (Regex.IsMatch(headers[i], patron, RegexOptions.IgnoreCase))
+                        if (Regex.IsMatch(NormalizarEncabezado(headers[i]), patron))
                         {
                             indiceEncontrado = i;
                             break;
@@ -285,6 +299,34 @@ namespace LabInventario.Services
                     columnasUsadas.Add(indiceEncontrado.Value);
             }
             return mapeo;
+        }
+
+        /// <summary>
+        /// Deja el encabezado listo para comparar contra los patrones
+        /// heurísticos: minúsculas, sin acentos y con la ñ/ü normalizadas.
+        /// Los encabezados reales suelen venir así ("Código de barras",
+        /// "No. Cuenta", "Descripción"), y los patrones del diccionario
+        /// están escritos sin acentos, así que se equiparan para que un
+        /// archivo de Excel/CSV en español se mapee solo.
+        /// </summary>
+        private static string NormalizarEncabezado(string encabezado)
+        {
+            var texto = encabezado.Trim().ToLowerInvariant();
+            var resultado = new StringBuilder(texto.Length);
+            foreach (var c in texto)
+            {
+                var sinAcento = c switch
+                {
+                    'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a',
+                    'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+                    'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+                    'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o',
+                    'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
+                    'ñ' => 'n', _ => c,
+                };
+                resultado.Append(sinAcento);
+            }
+            return resultado.ToString();
         }
     }
 }

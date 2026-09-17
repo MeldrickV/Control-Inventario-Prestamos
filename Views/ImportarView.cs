@@ -1,5 +1,5 @@
+using System.Globalization;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -49,7 +49,7 @@ namespace LabInventario.Views
             panelOpciones.Children.Add(_cmbEntidad);
 
             var btnImportar = new Button { Content = "Seleccionar archivo e importar...", Classes = { "Flat" }, MinWidth = 260, Height = 32 };
-            btnImportar.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), IniciarImportacion);
+            btnImportar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), IniciarImportacion);
 
             var lblLog = new TextBlock { Text = "Registro de importaciones:" };
 
@@ -75,12 +75,9 @@ namespace LabInventario.Views
 
         private void Log(string mensaje) => _txtLog.Text += mensaje + Environment.NewLine;
 
-        private Window? VentanaPropietaria() =>
-            (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-
         private async Task IniciarImportacion()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var rutaArchivo = await Dialogos.SeleccionarArchivo(propietaria, "Selecciona el archivo a importar",
@@ -191,7 +188,7 @@ namespace LabInventario.Views
                 {
                     var valorCantidad = fila.ElementAtOrDefault(idxCantidad.Value);
                     if (!string.IsNullOrWhiteSpace(valorCantidad))
-                        cantidad = (int)double.Parse(valorCantidad);
+                        cantidad = (int)double.Parse(valorCantidad, CultureInfo.InvariantCulture);
                 }
 
                 if (_materialRepo.ExisteCodigo(codigo)) return "duplicado";

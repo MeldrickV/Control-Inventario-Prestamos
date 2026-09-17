@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using LabInventario.Data;
 using LabInventario.Dialogs;
@@ -19,6 +18,7 @@ namespace LabInventario.Views
         }
 
         private readonly AlumnoRepository _repo = new();
+        private readonly PrestamoRepository _prestamoRepo = new();
         private readonly ObservableCollection<FilaAlumno> _filas = new();
         private readonly DataGrid _grid;
         private readonly TextBox _txtFiltro = new() { Width = 260 };
@@ -40,13 +40,13 @@ namespace LabInventario.Views
             };
 
             var btnNuevo = new Button { Content = "Nuevo alumno", Classes = { "Flat" }, MinWidth = 130 };
-            btnNuevo.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), Nuevo);
+            btnNuevo.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Nuevo);
             
             var btnEditar = new Button { Content = "Editar", Classes = { "Outlined" }, MinWidth = 100 };
-            btnEditar.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), Editar);
+            btnEditar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Editar);
             
             var btnEliminar = new Button { Content = "Eliminar", Classes = { "Danger" }, MinWidth = 100 };
-            btnEliminar.Click += (_, _) => Errores.Ejecutar(VentanaPropietaria(), Eliminar);
+            btnEliminar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Eliminar);
 
             _txtFiltro.TextChanged += (_, _) => Cargar();
 
@@ -80,13 +80,10 @@ namespace LabInventario.Views
         
         /// <summary>Recarga los datos desde la base de datos. Se llama cada vez que esta pestaña se vuelve visible.</summary>
         public void Actualizar() => Cargar();
-        
-        private Window? VentanaPropietaria() =>
-            (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
         private async Task Nuevo()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var dialogo = new AlumnoDialog();
@@ -105,7 +102,7 @@ namespace LabInventario.Views
 
         private async Task Editar()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var seleccionado = _grid.SelectedItem as FilaAlumno;
@@ -132,13 +129,25 @@ namespace LabInventario.Views
 
         private async Task Eliminar()
         {
-            var propietaria = VentanaPropietaria();
+            var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
             var seleccionado = _grid.SelectedItem as FilaAlumno;
             if (seleccionado is null)
             {
                 await Dialogos.MostrarInfo(propietaria, "Elige un alumno de la tabla primero.", "Sin selección");
+                return;
+            }
+
+            // Un alumno con préstamos nunca se borra: la FK de la tabla
+            // prestamos lo impediría de todos modos, pero con este chequeo el
+            // usuario recibe un mensaje claro en vez de un error de SQLite.
+            if (_prestamoRepo.TienePrestamosDeAlumno(seleccionado.Id))
+            {
+                await Dialogos.MostrarAdvertencia(propietaria,
+                    $"No se puede eliminar a '{seleccionado.Nombre}' porque tiene préstamos registrados. " +
+                    "Revisa su historial en la pestaña Historial si ya no debería seguir como alumno.",
+                    "Eliminación bloqueada");
                 return;
             }
 

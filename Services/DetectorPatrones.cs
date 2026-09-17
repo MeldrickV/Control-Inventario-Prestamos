@@ -27,7 +27,14 @@ namespace LabInventario.Services
         // si el número de cuenta real de la institución no calza con esto.
         public const string PatronPorDefecto = @"^\d{6,12}$";
 
-        private readonly ConfiguracionRepository _config = new();
+        private readonly ConfiguracionRepository _config;
+
+        /// <summary>
+        /// Usa la base de datos real (<see cref="DatabaseManager.Instancia"/>)
+        /// por defecto; recibir un <see cref="DatabaseManager"/> permite
+        /// apuntar a una base temporal en las pruebas.
+        /// </summary>
+        public DetectorPatrones(DatabaseManager? db = null) => _config = new ConfiguracionRepository(db);
 
         public string ObtenerPatron() => _config.Obtener(ClavePatron) ?? PatronPorDefecto;
 

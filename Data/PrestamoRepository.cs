@@ -16,19 +16,20 @@ namespace LabInventario.Data
         /// </summary>
         public PrestamoRepository(DatabaseManager? db = null) => _db = db ?? DatabaseManager.Instancia;
 
-        public int Crear(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, SqliteConnection? conexion = null)
+        public int Crear(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, SqliteConnection? conexion = null, int cablesExtra = 0)
         {
             using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
             var con = conexion ?? conexionPropia!;
             using var comando = con.CreateCommand();
             comando.CommandText = @"
-                INSERT INTO prestamos (AlumnoId, MaterialId, Cantidad, FechaSalida, Estado)
-                VALUES ($alumnoId, $materialId, $cantidad, $fecha, 'Activo');
+                INSERT INTO prestamos (AlumnoId, MaterialId, Cantidad, FechaSalida, Estado, CablesExtra)
+                VALUES ($alumnoId, $materialId, $cantidad, $fecha, 'Activo', $cablesExtra);
                 SELECT last_insert_rowid();";
             comando.Parameters.AddWithValue("$alumnoId", alumnoId);
             comando.Parameters.AddWithValue("$materialId", materialId);
             comando.Parameters.AddWithValue("$cantidad", cantidad);
             comando.Parameters.AddWithValue("$fecha", fechaSalida.ToString("yyyy-MM-dd HH:mm:ss"));
+            comando.Parameters.AddWithValue("$cablesExtra", cablesExtra);
             return Convert.ToInt32((long)comando.ExecuteScalar()!);
         }
 
@@ -173,7 +174,7 @@ namespace LabInventario.Data
                 SELECT p.Id, p.AlumnoId, p.MaterialId,
                        a.Nombre AS AlumnoNombre, a.NumeroCuenta,
                        m.Nombre AS MaterialNombre, m.CodigoBarras,
-                       p.Cantidad, p.FechaSalida, p.FechaRegreso, p.Estado
+                       p.Cantidad, p.FechaSalida, p.FechaRegreso, p.Estado, p.CablesExtra
                 FROM prestamos p
                 JOIN alumnos a ON p.AlumnoId = a.Id
                 JOIN materiales m ON p.MaterialId = m.Id
@@ -198,6 +199,7 @@ namespace LabInventario.Data
                         ? null
                         : ParsearFecha(lector.GetString(lector.GetOrdinal("FechaRegreso"))),
                     Estado = lector.GetString(lector.GetOrdinal("Estado")),
+                    CablesExtra = lector.GetInt32(lector.GetOrdinal("CablesExtra")),
                 });
             }
             return resultado;
@@ -225,6 +227,7 @@ namespace LabInventario.Data
             Estado = lector.GetString(lector.GetOrdinal("Estado")) == "Activo"
                 ? EstadoPrestamo.Activo
                 : EstadoPrestamo.Devuelto,
+            CablesExtra = lector.GetInt32(lector.GetOrdinal("CablesExtra")),
         };
 
         /// <summary>

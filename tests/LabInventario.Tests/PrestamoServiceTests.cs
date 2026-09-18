@@ -149,6 +149,68 @@ namespace LabInventario.Tests
                 Servicio.RegistrarEntradaDePrestamoEspecifico(sol.PrestamoId, 3));
         }
 
+        // ------------------------------ Cables extra ----------------------------
+
+        [Fact]
+        public void RegistrarSalida_ConCables_PersisteCablesExtra()
+        {
+            CrearAlumnoYMaterial();
+            // El material de ejemplo es un multímetro (no admite cable), pero
+            // el servicio no filtra: registrar lo que la UI le indique.
+            var resultado = Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 2, FechaPrueba(1), cablesExtra: 3);
+
+            var prestamo = Prestamos.ObtenerPorId(resultado.PrestamoId)!;
+            Assert.Equal(3, prestamo.CablesExtra);
+
+            var detalle = Prestamos.ListarDetallado();
+            var fila = Assert.Single(detalle);
+            Assert.Equal(3, fila.CablesExtra);
+        }
+
+        [Fact]
+        public void RegistrarSalida_SinCables_CablesExtraQuedaEnCero()
+        {
+            CrearAlumnoYMaterial();
+
+            var resultado = Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 1, FechaPrueba(1));
+
+            Assert.Equal(0, Prestamos.ObtenerPorId(resultado.PrestamoId)!.CablesExtra);
+        }
+
+        [Fact]
+        public void RegistrarLote_ConCables_PersistePorItem()
+        {
+            CrearAlumnoYMaterial();
+
+            Servicio.RegistrarLote(CuentaAlumno,
+                new[]
+                {
+                    new LoteItem(CodigoMaterial, 1, CablesExtra: 2),
+                    new LoteItem(CodigoMaterial, 1, CablesExtra: 0),
+                },
+                esSalida: true, FechaPrueba(1));
+
+            var detalle = Prestamos.ListarDetallado();
+            Assert.Equal(2, detalle.Count);
+            Assert.Equal(new[] { 0, 2 }, detalle.Select(d => d.CablesExtra).OrderBy(c => c));
+        }
+
+        [Fact]
+        public void RegistrarLote_FallaUnItemConCables_RollbackTotal()
+        {
+            CrearAlumnoYMaterial();
+            Materiales.Actualizar(Materiales.ObtenerPorCodigo(CodigoMaterial)!.Id, CodigoMaterial, NombreMaterial, 3, 3);
+
+            Assert.Throws<PrestamoException>(() =>
+                Servicio.RegistrarLote(CuentaAlumno,
+                    new[] { new LoteItem(CodigoMaterial, 1, CablesExtra: 2), new LoteItem(CodigoMaterial, 5) },
+                    esSalida: true));
+
+            // Rollback completo: ni préstamos ni stock, incluyendo los cables.
+            Assert.Empty(Prestamos.ListarDetallado());
+            Assert.Equal(3, Materiales.ObtenerPorCodigo(CodigoMaterial)!.CantidadDisponible);
+        }
+
         // ------------------------------ Lote --------------------------------
         [Fact]
         public void RegistrarLote_SalidaExitosa_RegistraTodoConLaMismaFecha()

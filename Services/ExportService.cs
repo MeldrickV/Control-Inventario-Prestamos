@@ -61,13 +61,15 @@ namespace LabInventario.Services
 
         // ---------------- Historial de préstamos ----------------
         private static readonly string[] EncabezadosHistorial =
-            { "Id", "Alumno", "NumeroCuenta", "Material", "CodigoBarras", "Cantidad", "FechaSalida", "FechaRegreso", "Estado" };
+            { "Id", "Alumno", "NumeroCuenta", "Material", "CodigoBarras", "Cantidad", "Extra", "FechaSalida", "FechaRegreso", "Estado" };
 
         private IEnumerable<string?[]> FilasHistorial(string filtro = "", bool soloActivos = false) =>
             _prestamoRepo.ListarDetallado(filtro, soloActivos).Select(p => new string?[]
             {
                 p.Id.ToString(), p.AlumnoNombre, p.NumeroCuenta, p.MaterialNombre, p.CodigoBarras,
-                p.Cantidad.ToString(), p.FechaSalida.ToString("yyyy-MM-dd HH:mm"),
+                p.Cantidad.ToString(),
+                DetectorComplementos.TextoExtra(p.MaterialNombre, p.CablesExtra),
+                p.FechaSalida.ToString("yyyy-MM-dd HH:mm"),
                 p.FechaRegreso?.ToString("yyyy-MM-dd HH:mm") ?? "", p.Estado,
             });
 

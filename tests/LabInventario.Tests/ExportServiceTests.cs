@@ -59,7 +59,25 @@ namespace LabInventario.Tests
             var fila = Assert.Single(datos.Filas, f => f[2] == CuentaAlumno);
             Assert.Equal(CodigoMaterial, fila[4]);
             Assert.Equal("2", fila[5]);
-            Assert.Equal("Activo", fila[8]);
+            Assert.Equal("", fila[6]);
+            Assert.Equal("Activo", fila[9]);
+        }
+
+        [Fact]
+        public void ExportarHistorialCsv_ReflejaCablesExtra()
+        {
+            CrearAlumno();
+            Materiales.Crear("8500000000012", "Osciloscopio digital", 5);
+            Servicio.RegistrarSalida(CuentaAlumno, "8500000000012", 1, FechaPrueba(2), cablesExtra: 2);
+            var ruta = CrearRuta("historial-extra.csv");
+
+            _exportador.ExportarHistorialCsv(ruta);
+
+            var datos = new ImportService().LeerArchivo(ruta, esAlumnos: false);
+            var fila = Assert.Single(datos.Filas, f => f[2] == CuentaAlumno);
+            Assert.Equal("8500000000012", fila[4]);
+            Assert.Equal("1", fila[5]);
+            Assert.Equal("Puntas de osciloscopio: 2", fila[6]);
         }
 
         [Fact]

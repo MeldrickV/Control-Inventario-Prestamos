@@ -276,6 +276,11 @@ namespace LabInventario.Data
                     FechaSalida   TEXT NOT NULL,
                     FechaRegreso  TEXT NULL,
                     Estado        TEXT NOT NULL DEFAULT 'Activo',
+                    -- Cantidad de cable complementario prestado TEMPORALMENTE
+                    -- con el material (0 = no lleva). Los cables no tienen
+                    -- stock ni inventario: es solo un registro informativo
+                    -- del historial (ver Services/DetectorComplementos.cs).
+                    CablesExtra   INTEGER NOT NULL DEFAULT 0,
                     FOREIGN KEY (AlumnoId) REFERENCES alumnos(Id),
                     FOREIGN KEY (MaterialId) REFERENCES materiales(Id)
                 );
@@ -293,6 +298,41 @@ namespace LabInventario.Data
                 );
             ";
             comando.ExecuteNonQuery();
+
+            // Migración suave para bases ya existentes: `CREATE TABLE IF NOT
+            // EXISTS` no modifica las tablas creadas en versiones previas,
+            // así que las columnas nuevas se agregan aquí solo si faltan.
+            // Se consulta PRAGMA table_info para decidir (SQLite no soporta
+            // "ALTER TABLE ... ADD COLUMN IF NOT EXISTS").
+            foreach (var columna in ColumnasMigracionPrestamos)
+            {
+                if (!ColumnaExiste(conexion, "prestamos", columna))
+                {
+                    using var alter = conexion.CreateCommand();
+                    alter.CommandText = $"ALTER TABLE prestamos ADD COLUMN {columna} INTEGER NOT NULL DEFAULT 0";
+                    alter.ExecuteNonQuery();
+                }
+            }
+        }
+
+        // Columnas nuevas que se añaden a instalaciones anteriores (una por
+        // versión de esquema). Se recorren en orden en CrearEsquema.
+        private static readonly string[] ColumnasMigracionPrestamos =
+        {
+            "CablesExtra",
+        };
+
+        private static bool ColumnaExiste(SqliteConnection conexion, string tabla, string columna)
+        {
+            using var comando = conexion.CreateCommand();
+            comando.CommandText = $"PRAGMA table_info(\"{tabla}\")";
+            using var lector = comando.ExecuteReader();
+            while (lector.Read())
+            {
+                if (string.Equals(lector.GetString(1), columna, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
     }
 }

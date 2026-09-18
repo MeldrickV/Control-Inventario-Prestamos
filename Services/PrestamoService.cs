@@ -13,11 +13,14 @@ namespace LabInventario.Services
     public record ResultadoEntrada(Alumno Alumno, Material Material, int CantidadDevuelta);
 
     /// <summary>
-    /// Un artículo acumulado en el lote de escaneo: el código escaneado y
+    /// Un artículo acumulado en el lote de escaneo: el código escaneado,
     /// cuántas unidades acumuló (1 por escaneo, o más si el mismo material
-    /// se escaneó varias veces).
+    /// se escaneó varias veces) y cuántos cables complementarios se
+    /// prestaron junto con él (0 = no lleva; ver
+    /// <see cref="DetectorComplementos"/>). El cable es solo un registro
+    /// del historial, no inventario.
     /// </summary>
-    public record LoteItem(string Codigo, int Cantidad);
+    public record LoteItem(string Codigo, int Cantidad, int CablesExtra = 0);
 
     /// <summary>
     /// Capa de servicios: aquí vive la lógica de negocio real (reglas de
@@ -67,7 +70,7 @@ namespace LabInventario.Services
         /// la misma hora en vez de con pequeñas diferencias entre artículo y
         /// artículo. Si se omite, se usa la hora actual.
         /// </param>
-        public ResultadoSalida RegistrarSalida(string numeroCuenta, string codigoBarras, int cantidad = 1, DateTime? fechaSalida = null)
+        public ResultadoSalida RegistrarSalida(string numeroCuenta, string codigoBarras, int cantidad = 1, DateTime? fechaSalida = null, int cablesExtra = 0)
         {
             if (cantidad <= 0)
                 throw new PrestamoException("La cantidad a prestar debe ser mayor que cero.");
@@ -93,7 +96,7 @@ namespace LabInventario.Services
 
                 var fecha = fechaSalida ?? DateTime.Now;
                 _materialRepo.AjustarDisponible(material.Id, -cantidad, conexion);
-                var prestamoId = _prestamoRepo.Crear(alumno.Id, material.Id, cantidad, fecha, conexion);
+                var prestamoId = _prestamoRepo.Crear(alumno.Id, material.Id, cantidad, fecha, conexion, cablesExtra);
 
                 material.CantidadDisponible -= cantidad; // reflejar el cambio en el objeto en memoria
                 resultado = new ResultadoSalida(alumno, material, prestamoId);
@@ -292,7 +295,7 @@ namespace LabInventario.Services
                         }
 
                         _materialRepo.AjustarDisponible(material.Id, -item.Cantidad, conexion);
-                        _prestamoRepo.Crear(alumno.Id, material.Id, item.Cantidad, fechaOperacion, conexion);
+                        _prestamoRepo.Crear(alumno.Id, material.Id, item.Cantidad, fechaOperacion, conexion, item.CablesExtra);
                     }
                     else
                     {

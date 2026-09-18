@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using LabInventario.Data;
+using LabInventario.Dialogs;
 using LabInventario.Helpers;
 using LabInventario.Models;
 using LabInventario.Services;
@@ -40,6 +41,12 @@ namespace LabInventario.Views
             public string Codigo { get; set; } = string.Empty;
             public string Nombre { get; set; } = string.Empty;
             public int Cantidad { get; set; }
+
+            // Cantidad de cable complementario prestado con este material
+            // (0 = no lleva). Se auto-agrega 1 al escanear un material que
+            // admite cable y se puede ajustar manualmente con
+            // "Agregar cables..." en cualquier momento.
+            public int CablesExtra { get; set; }
         }
 
         private readonly List<ItemEscaneado> _listaTemporal = new();
@@ -52,6 +59,13 @@ namespace LabInventario.Views
         private readonly TextBox _txtEscaneo = new() { FontSize = 16, HorizontalAlignment = HorizontalAlignment.Stretch };
 
         private readonly ListBox _lstAcumulados = new() { Height = 220, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Stretch };
+        private readonly Button _btnCables = new()
+        {
+            Content = "Agregar cables...",
+            Classes = { "Outlined" },
+            IsEnabled = false,
+            FontSize = 13,
+        };
         private readonly Button _btnConfirmar = new()
         {
             Content = "ACEPTAR",
@@ -100,8 +114,10 @@ namespace LabInventario.Views
 
             // Panel: lista acumulada
             _btnConfirmar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), Confirmar);
+            _btnCables.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), AgregarCables);
             var panelLista = new StackPanel { Spacing = 10 };
             panelLista.Children.Add(_lstAcumulados);
+            panelLista.Children.Add(_btnCables);
             panelLista.Children.Add(_btnConfirmar);
             var grupoLista = Cajas.GroupBox("Lista de equipo a procesar", panelLista, 380);
 
@@ -222,7 +238,15 @@ namespace LabInventario.Views
             if (existente is not null)
                 existente.Cantidad += 1;
             else
-                _listaTemporal.Add(new ItemEscaneado { Codigo = material.CodigoBarras, Nombre = material.Nombre, Cantidad = 1 });
+            {
+                var item = new ItemEscaneado { Codigo = material.CodigoBarras, Nombre = material.Nombre, Cantidad = 1 };
+                // Los materiales que admiten cable (fuente, generador,
+                // osciloscopio) llevan 1 por defecto; si el caso lo amerita
+                // el operador agrega más (o quita) con "Agregar cables...".
+                if (DetectorComplementos.Detectar(material.Nombre) != TipoCable.Ninguno)
+                    item.CablesExtra = 1;
+                _listaTemporal.Add(item);
+            }
 
             RefrescarLista();
             _lblEstado.Classes.Clear();
@@ -234,7 +258,68 @@ namespace LabInventario.Views
         {
             _itemsAcumulados.Clear();
             foreach (var item in _listaTemporal)
-                _itemsAcumulados.Add($"{item.Nombre} [{item.Codigo}]  —  Cantidad: {item.Cantidad}");
+            {
+                var texto = $"{item.Nombre} [{item.Codigo}]  —  Cantidad: {item.Cantidad}";
+                if (item.CablesExtra > 0)
+                {
+                    var etiqueta = DetectorComplementos.Etiqueta(DetectorComplementos.Detectar(item.Nombre));
+                    texto += $" · {etiqueta}: {item.CablesExtra}";
+                }
+                _itemsAcumulados.Add(texto);
+            }
+
+            // El ajuste de cables solo tiene sentido si hay algún material
+            // escaneado que los admita.
+            _btnCables.IsEnabled = _listaTemporal.Any(i =>
+                DetectorComplementos.Detectar(i.Nombre) != TipoCable.Ninguno);
+        }
+
+        /// <summary>
+        /// Abre el diálogo para ajustar los cables complementarios de los
+        /// materiales escaneados. Se puede invocar en cualquier momento, sin
+        /// importar el orden en que se escanearon los materiales: cada
+        /// material admitido aparece con su propia cantidad, correctamente
+        /// asociada a su tipo de cable.
+        /// </summary>
+        private async Task AgregarCables()
+        {
+            var propietaria = Ventanas.Propietaria();
+            if (propietaria is null) return;
+
+            var lineas = new List<LineaCable>();
+            foreach (var item in _listaTemporal)
+            {
+                var tipo = DetectorComplementos.Detectar(item.Nombre);
+                if (tipo == TipoCable.Ninguno) continue;
+                lineas.Add(new LineaCable(item.Nombre, DetectorComplementos.Etiqueta(tipo), item.CablesExtra));
+            }
+
+            if (lineas.Count == 0)
+            {
+                await Dialogos.MostrarInfo(propietaria,
+                    "No hay materiales escaneados que admitan cable complementario (fuente, generador u osciloscopio).",
+                    "Sin materiales");
+                return;
+            }
+
+            var dialogo = new CablesDialog(lineas);
+            await dialogo.ShowDialog(propietaria);
+            if (dialogo.Resultado is null) return;
+
+            // Escribe las cantidades de vuelta en el MISMO orden en que se
+            // construyeron las líneas (igual recorrido, saltando materiales
+            // que no admiten cable).
+            var indice = 0;
+            foreach (var item in _listaTemporal)
+            {
+                if (DetectorComplementos.Detectar(item.Nombre) == TipoCable.Ninguno) continue;
+                item.CablesExtra = dialogo.Resultado[indice++];
+            }
+
+            RefrescarLista();
+            _lblEstado.Classes.Clear();
+            _lblEstado.Classes.Add("Primary");
+            _lblEstado.Text = "Cables ajustados. Presiona Enter en blanco cuando termines.";
         }
 
         private async Task Confirmar()
@@ -259,7 +344,7 @@ namespace LabInventario.Views
 
             var fechaOperacion = DateTime.Now;
             var items = _listaTemporal
-                .Select(i => new LoteItem(i.Codigo, i.Cantidad))
+                .Select(i => new LoteItem(i.Codigo, i.Cantidad, i.CablesExtra))
                 .ToList();
             var esSalida = _radioSalida.IsChecked == true;
             var alumnoNombre = _alumnoActual.Nombre;
@@ -312,6 +397,7 @@ namespace LabInventario.Views
             _txtEscaneo.Clear();
             _listaTemporal.Clear();
             _itemsAcumulados.Clear();
+            _btnCables.IsEnabled = false;
             _alumnoActual = null;
             _lblAlumnoInfo.Text = "Alumno: (esperando escaneo)";
             ActualizarEtiquetaEscaneo();

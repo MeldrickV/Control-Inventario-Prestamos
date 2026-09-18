@@ -54,6 +54,9 @@ namespace LabInventario.Views
             public string Salida { get; set; } = "";
             public string Regreso { get; set; } = "";
             public string Estado { get; set; } = "";
+
+            /// <summary>Texto del cable complementario resuelto según el material asociado ("" si no lleva). Ver <see cref="DetectorComplementos.TextoExtra"/>.</summary>
+            public string Extras { get; set; } = "";
         }
 
         private readonly PrestamoRepository _repo = new();
@@ -109,6 +112,7 @@ namespace LabInventario.Views
                     new DataGridTextColumn { Header = "Fecha salida", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Salida)), Width = new DataGridLength(1.4, DataGridLengthUnitType.Star), Tag = "Salida" },
                     new DataGridTextColumn { Header = "Fecha regreso", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Regreso)), Width = new DataGridLength(1.2, DataGridLengthUnitType.Star), Tag = "Regreso" },
                     new DataGridTextColumn { Header = "Estado", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Estado)), Width = new DataGridLength(0.8, DataGridLengthUnitType.Star), Tag = "Estado" },
+                    new DataGridTextColumn { Header = "Extra", Binding = new Avalonia.Data.Binding(nameof(FilaPrestamo.Extras)), Width = new DataGridLength(1.4, DataGridLengthUnitType.Star) },
                 },
             };
             _grid.Sorting += Grid_Sorting;
@@ -293,6 +297,7 @@ namespace LabInventario.Views
                         Salida = unico.FechaSalida.ToString("yyyy-MM-dd HH:mm:ss"),
                         Regreso = "-",
                         Estado = "Activo",
+                        Extras = DetectorComplementos.TextoExtra(grupo.Material, unico.CablesExtra),
                     });
                     continue;
                 }
@@ -313,6 +318,7 @@ namespace LabInventario.Views
                     Salida = grupo.UltimaSalida.ToString("yyyy-MM-dd HH:mm:ss") + "  (última)",
                     Regreso = "-",
                     Estado = "Activo",
+                    Extras = DetectorComplementos.TextoExtra(grupo.Material, grupo.Detalle.Sum(x => x.CablesExtra)),
                 });
 
                 if (!expandido) continue;
@@ -333,6 +339,7 @@ namespace LabInventario.Views
                         Salida = item.FechaSalida.ToString("yyyy-MM-dd HH:mm:ss"),
                         Regreso = "-",
                         Estado = "Activo",
+                        Extras = DetectorComplementos.TextoExtra(item.MaterialNombre, item.CablesExtra),
                     });
                 }
             }
@@ -353,6 +360,7 @@ namespace LabInventario.Views
                     Salida = p.FechaSalida.ToString("yyyy-MM-dd HH:mm:ss"),
                     Regreso = p.FechaRegreso?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-",
                     Estado = p.Estado,
+                    Extras = DetectorComplementos.TextoExtra(p.MaterialNombre, p.CablesExtra),
                 });
             }
         }

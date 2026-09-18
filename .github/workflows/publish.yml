@@ -1,9 +1,11 @@
 name: publish
 
 # Genera ejecutables autocontenidos (no requieren tener .NET instalado) para
-# Linux, Windows y macOS. Se dispara a mano desde "Actions", o al crear un
-# tag de versión (v1.0.0, v1.1.0, etc.), en cuyo caso además adjunta los
-# archivos a un Release de GitHub.
+# Linux, Windows y macOS y los empaqueta en un .zip por plataforma. Se dispara
+# a mano desde "Actions", o al crear un tag de versión (v1.0.0, v1.1.0, etc.),
+# en cuyo caso además sube los .zip a un Release de GitHub. Si el Release de
+# ese tag ya existía (p. ej. se relanzó el tag), primero lo elimina para
+# regenerarlo limpio, sin assets sobrantes de corridas anteriores.
 on:
   workflow_dispatch:
   push:
@@ -14,7 +16,8 @@ permissions:
   contents: write
 
 jobs:
-  publish:
+  publicar:
+    name: Empaquetar (${{ matrix.rid }})
     strategy:
       fail-fast: false
       matrix:
@@ -45,17 +48,51 @@ jobs:
           -p:UseAppHost=true
           -o publicado/${{ matrix.rid }}
 
-      - name: Subir como artifact descargable
+      - name: Empaquetar en .zip (ejecutable + librerías nativas)
+        shell: pwsh
+        run: Compress-Archive -Path "publicado/${{ matrix.rid }}/*" -DestinationPath "publicado/LabInventario-${{ matrix.rid }}.zip" -Force
+
+      - name: Subir paquete comprimido como artifact
         uses: actions/upload-artifact@v4
         with:
           name: LabInventario-${{ matrix.rid }}
-          path: publicado/${{ matrix.rid }}
+          path: publicado/LabInventario-${{ matrix.rid }}.zip
 
-      - name: Crear/adjuntar al Release con título y notas (solo tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    name: Crear/regenerar Release (solo tag v*)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publicar
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar los paquetes comprimidos
+        uses: actions/download-artifact@v4
+        with:
+          path: paquetes
+          merge-multiple: true
+
+      - name: Eliminar el Release previo de este tag (para regenerarlo limpio)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = context.ref.replace('refs/tags/', '');
+            try {
+              const { data: releases } = await github.rest.repos.listReleases({ owner, repo });
+              for (const r of releases) {
+                if (r.tag_name === tag) {
+                  await github.rest.repos.deleteRelease({ owner, repo, release_id: r.id });
+                  core.info(`Release ${r.id} (${tag}) eliminado`);
+                }
+              }
+            } catch (error) {
+              core.info(`Sin release previo para ${tag}: ${error.message}`);
+            }
+
+      - name: Crear Release con los paquetes .zip y notas
         uses: softprops/action-gh-release@v2
         with:
-          files: publicado/${{ matrix.rid }}/**
+          files: paquetes/*.zip
           tag_name: ${{ github.ref_name }}
           name: "LabInventario ${{ github.ref_name }}"
           body: |
@@ -70,9 +107,10 @@ jobs:
             - Importación y exportación CSV / XLSX.
             - Respaldo cifrado de la base de datos (SQLCipher).
 
-            Ejecutables autocontenidos (un solo archivo) para cada plataforma;
-            no requieren tener .NET instalado.
+            Los archivos adjuntos son paquetes comprimidos (un .zip por
+            plataforma) con el ejecutable autocontenido y sus librerías
+            nativas; no requieren tener .NET instalado.
 
-            - **LabInventario-linux-x64**: Linux 64 bits
-            - **LabInventario-win-x64**: Windows 64 bits
-            - **LabInventario-osx-x64**: macOS 64 bits
+            - **LabInventario-linux-x64.zip**: Linux 64 bits
+            - **LabInventario-win-x64.zip**: Windows 64 bits
+            - **LabInventario-osx-x64.zip**: macOS 64 bits

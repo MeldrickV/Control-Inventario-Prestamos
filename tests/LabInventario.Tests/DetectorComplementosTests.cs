@@ -17,6 +17,15 @@ namespace LabInventario.Tests
         [InlineData("Multímetro digital", TipoCable.Ninguno)]
         [InlineData("Protoboard grande", TipoCable.Ninguno)]
         [InlineData("Cables de prueba", TipoCable.Ninguno)]
+        [InlineData("O1 TEKTRONIX TBS1052B-EDU C051040", TipoCable.Osciloscopio)]
+        [InlineData("O10 TEKTRONIX TBS1052B-EDU C042068", TipoCable.Osciloscopio)]
+        [InlineData("o-1041", TipoCable.Osciloscopio)]
+        [InlineData("F7 LEYBOLD 521 546 14120191", TipoCable.Fuente)]
+        [InlineData("F10 FUENTE DE PODER GW INSTEK/GPS-3303 GEP811196", TipoCable.Fuente)]
+        [InlineData("G12 EQUIPO DE LABORATORIO INSTEK/SFG 1013 GCQ851443", TipoCable.Generador)]
+        [InlineData("GX GENERADOR DE FUNCIONES SIN MARCA/G001026", TipoCable.Generador)]
+        [InlineData("Ondulador de corriente", TipoCable.Ninguno)]
+        [InlineData("Fusibles 5A", TipoCable.Ninguno)]
         public void Detectar_DetectaTipoSegunNombre(string nombre, TipoCable esperado) =>
             Assert.Equal(esperado, DetectorComplementos.Detectar(nombre));
 

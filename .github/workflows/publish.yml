@@ -10,6 +10,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     strategy:
@@ -48,8 +51,28 @@ jobs:
           name: LabInventario-${{ matrix.rid }}
           path: publicado/${{ matrix.rid }}
 
-      - name: Adjuntar al Release (solo si el push fue un tag v*)
+      - name: Crear/adjuntar al Release con título y notas (solo tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: publicado/${{ matrix.rid }}/**
+          tag_name: ${{ github.ref_name }}
+          name: "LabInventario ${{ github.ref_name }}"
+          body: |
+            LabInventario — Gestión de salidas y entradas del Laboratorio de Electrónica.
+
+            Primera versión estable del sistema, con los principales módulos:
+
+            - Inventario de materiales y catálogo de alumnos.
+            - Salidas y devoluciones de préstamos (FIFO).
+            - Escaneo de códigos de barras.
+            - Cables complementarios auto-detectados (fuente, generador, osciloscopio).
+            - Importación y exportación CSV / XLSX.
+            - Respaldo cifrado de la base de datos (SQLCipher).
+
+            Ejecutables autocontenidos (un solo archivo) para cada plataforma;
+            no requieren tener .NET instalado.
+
+            - **LabInventario-linux-x64**: Linux 64 bits
+            - **LabInventario-win-x64**: Windows 64 bits
+            - **LabInventario-osx-x64**: macOS 64 bits

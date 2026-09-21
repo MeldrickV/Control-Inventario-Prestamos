@@ -51,6 +51,25 @@ namespace LabInventario.Data
         {
             using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
             var con = conexion ?? conexionPropia!;
+
+            var alumno = BuscarPorCuentaExacta(con, numeroCuenta);
+            if (alumno is not null) return alumno;
+
+            // El escáner puede entregar el número de cuenta con o sin guiones
+            // (p. ej. "1845868-8" vs "18458688"); si la búsqueda exacta no
+            // calza, comparar normalizado (ambos lados sin guiones).
+            var sinGuiones = numeroCuenta.Replace("-", "");
+            if (sinGuiones.Length == 0) return null;
+
+            using var comando = con.CreateCommand();
+            comando.CommandText = "SELECT * FROM alumnos WHERE REPLACE(NumeroCuenta, '-', '') = $cuenta";
+            comando.Parameters.AddWithValue("$cuenta", sinGuiones);
+            using var lector = comando.ExecuteReader();
+            return lector.Read() ? Mapear(lector) : null;
+        }
+
+        private static Alumno? BuscarPorCuentaExacta(SqliteConnection con, string numeroCuenta)
+        {
             using var comando = con.CreateCommand();
             comando.CommandText = "SELECT * FROM alumnos WHERE NumeroCuenta = $cuenta";
             comando.Parameters.AddWithValue("$cuenta", numeroCuenta);

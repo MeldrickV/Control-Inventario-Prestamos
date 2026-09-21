@@ -146,6 +146,8 @@ Este patrón puede modificarse desde la configuración del sistema.
 
 Si el patrón no permite determinar correctamente el tipo de código, la aplicación puede recurrir a la búsqueda correspondiente en las tablas de alumnos y materiales.
 
+La búsqueda de alumnos por número de cuenta es tolerante a guiones: escanear `18458688` o `1845868-8` encuentra al mismo alumno, porque si la coincidencia exacta falla se compara el número de cuenta sin guiones.
+
 ## Tecnologías utilizadas
 
 | Tecnología | Uso |

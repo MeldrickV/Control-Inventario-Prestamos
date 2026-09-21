@@ -97,5 +97,38 @@ namespace LabInventario.Tests
             Assert.Equal(1, Prestamos.ContarDevueltosAntiguos(10));
             Assert.Equal(3, Prestamos.ListarDetallado().Count); // contar no borra nada
         }
+
+        [Fact]
+        public void ObtenerPorCuenta_EscaneoSinGuiones_EncuentraCuentaConGuiones()
+        {
+            var id = Alumnos.Crear(NombreAlumno, "1845868-8");
+
+            var alumno = Alumnos.ObtenerPorCuenta("18458688");
+
+            Assert.NotNull(alumno);
+            Assert.Equal(id, alumno!.Id);
+            Assert.Equal("1845868-8", alumno.NumeroCuenta);
+        }
+
+        [Fact]
+        public void ObtenerPorCuenta_EscaneoConGuiones_EncuentraCuentaSinGuiones()
+        {
+            var id = Alumnos.Crear(NombreAlumno, "18458688");
+
+            var alumno = Alumnos.ObtenerPorCuenta("1845868-8");
+
+            Assert.NotNull(alumno);
+            Assert.Equal(id, alumno!.Id);
+        }
+
+        [Fact]
+        public void ObtenerPorCuenta_BuscaExactoPrimero_CuandoExistenAmbasFormas()
+        {
+            var idConGuiones = Alumnos.Crear(NombreAlumno, "1845868-8");
+            var idSinGuiones = Alumnos.Crear("Otro alumno", "18458688");
+
+            Assert.Equal(idConGuiones, Alumnos.ObtenerPorCuenta("1845868-8")!.Id);
+            Assert.Equal(idSinGuiones, Alumnos.ObtenerPorCuenta("18458688")!.Id);
+        }
     }
 }

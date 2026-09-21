@@ -98,11 +98,11 @@ jobs:
           body: |
             LabInventario — Gestión de salidas y entradas del Laboratorio de Electrónica.
 
-            Primera versión estable del sistema, con los principales módulos:
+            Cambios incluidos en esta versión:
 
             - Inventario de materiales y catálogo de alumnos.
             - Salidas y devoluciones de préstamos (FIFO).
-            - Escaneo de códigos de barras.
+            - Escaneo de códigos de barras tolerante a guiones en el número de cuenta (`18458688` y `1845868-8`).
             - Cables complementarios auto-detectados (fuente, generador, osciloscopio).
             - Importación y exportación CSV / XLSX.
             - Respaldo cifrado de la base de datos (SQLCipher).

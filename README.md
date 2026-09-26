@@ -148,6 +148,28 @@ Si el patrón no permite determinar correctamente el tipo de código, la aplicac
 
 La búsqueda de alumnos por número de cuenta es tolerante a guiones: escanear `18458688` o `1845868-8` encuentra al mismo alumno, porque si la coincidencia exacta falla se compara el número de cuenta sin guiones.
 
+## Sincronización con Google Sheets
+
+Cada laboratorio sincroniza con **su propia hoja de cálculo de Google** (una por computadora): la base local sigue siendo la fuente de verdad y la hoja es el buzón/respaldo en la nube.
+
+Estructura de cada hoja (pestañas con encabezado en la primera fila):
+
+```text
+Historial   → PrestamoId, Alumno, NumeroCuenta, Material, CodigoBarras, Cantidad, CablesExtra, FechaSalida, FechaRegreso, Estado, SyncId
+Alumnos     → Nombre, NumeroCuenta
+Inventario  → Nombre, CodigoBarras, CantidadTotal
+```
+
+Flujos:
+
+- **Subida automática del historial**: al cerrar la aplicación se envían a la pestaña `Historial` los préstamos nuevos (marcador local `Sync.UltimoPrestamoSubido`; sin red queda en cola y se reintenta después, sin duplicar).
+- **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` con el botón "Publicar catálogo" de Exportar datos. Es la única vía de subida del catálogo.
+- **Bajada con confirmación**: la app revisa la hoja al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias en el catálogo se muestra un diálogo con lo que se propone (altas, cambios, bajas) y solo se aplica lo confirmado. Las bajas de registros con historial se bloquean, como en el borrado local.
+
+Configuración (menú `Administración → Configuración de sincronización…`, solo admin): identificador de la computadora, nombre del laboratorio, ID de la hoja (`spreadsheetId`), ruta del archivo de credenciales JSON e intervalo de revisión. Sin ID de hoja la sincronización queda desactivada.
+
+> Nota: la autenticación con Google (Service Account u OAuth) aún está por decidirse; la lógica ya está preparada contra una interfaz (`ISheetsClient`) y se prueba en CI con un doble en memoria. El archivo `credentials.json` nunca debe subirse al repositorio.
+
 ## Tecnologías utilizadas
 
 | Tecnología | Uso |

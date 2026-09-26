@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using LabInventario.Dialogs;
 using LabInventario.Helpers;
 using LabInventario.Services;
 
@@ -17,6 +18,8 @@ namespace LabInventario.Views
     public class ExportarView : UserControl
     {
         private readonly ExportService _servicio = new();
+        private readonly SincronizacionService _sync = new();
+        private readonly TextBlock _lblSyncEstado = new() { TextWrapping = TextWrapping.Wrap };
         private readonly PrestamosView? _historialView;
         private readonly CheckBox _chkUsarFiltro = new() { Content = "Usar filtro de la pestaña Historial" };
         private readonly CheckBox _chkSoloActivos = new() { Content = "Solo activos" };
@@ -124,6 +127,12 @@ namespace LabInventario.Views
             raiz.Children.Add(panelCajas);
             raiz.Children.Add(new Border { Height = 10 });
 
+            var cajaSync = Cajas.GroupBox("Sincronización con Google Sheets", ConstruirPanelSync());
+            DockPanel.SetDock(cajaSync, Dock.Top);
+            raiz.Children.Add(cajaSync);
+            raiz.Children.Add(new Border { Height = 10 });
+            ActualizarEstadoSync();
+
             var lblLog = new TextBlock { Text = "Registro de exportaciones:" };
             DockPanel.SetDock(lblLog, Dock.Top);
             raiz.Children.Add(lblLog);
@@ -171,6 +180,124 @@ namespace LabInventario.Views
             accionExportar(ruta);
             Log($"{etiqueta} exportado a Excel: {ruta}");
             await Dialogos.MostrarInfo(propietaria, "Exportación completada.", "Listo");
+        }
+
+        private StackPanel ConstruirPanelSync()
+        {
+            var panel = new StackPanel { Spacing = 10 };
+            panel.Children.Add(_lblSyncEstado);
+
+            var filaBotones = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+
+            var btnSincronizar = new Button { Content = "Sincronizar ahora…", Classes = { "Flat" }, MinWidth = 150, Height = 32 };
+            btnSincronizar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), SincronizarAhoraAsync);
+
+            var btnPublicar = new Button { Content = "Publicar catálogo…", Classes = { "Outlined" }, MinWidth = 150, Height = 32 };
+            btnPublicar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), PublicarCatalogoAsync);
+
+            var btnConfigurar = new Button { Content = "Configurar…", Classes = { "Outlined" }, MinWidth = 120, Height = 32 };
+            btnConfigurar.Click += async (_, _) =>
+            {
+                var propietaria = Ventanas.Propietaria();
+                if (propietaria is null) return;
+                var dialogo = new ConfiguracionSincronizacionDialog();
+                await dialogo.ShowDialog(propietaria);
+                ActualizarEstadoSync();
+            };
+
+            filaBotones.Children.Add(btnSincronizar);
+            filaBotones.Children.Add(btnPublicar);
+            filaBotones.Children.Add(btnConfigurar);
+            panel.Children.Add(filaBotones);
+            return panel;
+        }
+
+        private void ActualizarEstadoSync()
+        {
+            if (!_sync.Configurada)
+            {
+                _lblSyncEstado.Text = "Estado: sin configurar (falta el ID de la hoja de Google).";
+                return;
+            }
+            var ultima = _sync.UltimaSincronizacion;
+            _lblSyncEstado.Text = "Estado: configurada." +
+                (string.IsNullOrWhiteSpace(ultima) ? "" : $" Última sincronización: {ultima}.") +
+                (_sync.ClienteDisponible ? "" : " Cliente de Google aún no conectado (pendiente la autenticación).");
+        }
+
+        private async Task SincronizarAhoraAsync()
+        {
+            var propietaria = Ventanas.Propietaria();
+            if (propietaria is null) return;
+
+            if (!_sync.Configurada)
+            {
+                await Dialogos.MostrarAdvertencia(propietaria,
+                    "Primero configura la sincronización (ID de la hoja) con el botón Configurar.", "Sin configurar");
+                return;
+            }
+            if (!_sync.ClienteDisponible)
+            {
+                await Dialogos.MostrarAdvertencia(propietaria,
+                    "El cliente de Google Sheets aún no está conectado (pendiente definir la autenticación).", "Sin conexión");
+                return;
+            }
+
+            var subida = await _sync.SubirHistorialAsync();
+            Log(subida.Mensaje);
+
+            var cambios = await _sync.ObtenerCambiosPendientesAsync();
+            if (cambios.Count == 0)
+            {
+                await Dialogos.MostrarInfo(propietaria, subida.Mensaje + "\nNo hay cambios pendientes en la hoja.", "Sincronización");
+                return;
+            }
+
+            var dialogo = new ConfirmarCambiosDialog(cambios);
+            await dialogo.ShowDialog(propietaria);
+            if (!dialogo.Confirmado)
+            {
+                Log("Cambios de la hoja rechazados por el administrador.");
+                return;
+            }
+
+            var resultado = await _sync.AplicarCambiosAsync(cambios);
+            Log($"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}.");
+            foreach (var bloqueado in resultado.Bloqueados)
+                Log("Bloqueado: " + bloqueado);
+            await Dialogos.MostrarInfo(propietaria,
+                $"Historial: {subida.Mensaje}\nCambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}.",
+                "Sincronización");
+            ActualizarEstadoSync();
+        }
+
+        private async Task PublicarCatalogoAsync()
+        {
+            var propietaria = Ventanas.Propietaria();
+            if (propietaria is null) return;
+
+            if (!_sync.Configurada)
+            {
+                await Dialogos.MostrarAdvertencia(propietaria,
+                    "Primero configura la sincronización (ID de la hoja) con el botón Configurar.", "Sin configurar");
+                return;
+            }
+            if (!_sync.ClienteDisponible)
+            {
+                await Dialogos.MostrarAdvertencia(propietaria,
+                    "El cliente de Google Sheets aún no está conectado (pendiente definir la autenticación).", "Sin conexión");
+                return;
+            }
+
+            var confirmar = await Dialogos.Confirmar(propietaria,
+                "Se reescribirán las pestañas Alumnos e Inventario de la hoja con el catálogo local actual.\n\n¿Continuar?",
+                "Publicar catálogo");
+            if (!confirmar) return;
+
+            var filas = await _sync.PublicarCatalogoAsync();
+            Log($"Catálogo publicado en la hoja: {filas} fila(s).");
+            await Dialogos.MostrarInfo(propietaria, "Catálogo publicado.", "Sincronización");
+            ActualizarEstadoSync();
         }
 
         private void ExportarHistorialCsv(string ruta) =>

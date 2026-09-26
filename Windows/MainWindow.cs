@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using LabInventario.Data;
 using LabInventario.Dialogs;
 using LabInventario.Helpers;
@@ -50,6 +51,9 @@ namespace LabInventario.Windows
         /// opción "solo activos" vigentes al exportar el historial).
         /// </summary>
         private readonly PrestamosView _historial = new();
+        private readonly SincronizacionService _sync = new();
+        private readonly DispatcherTimer _syncTimer = new();
+        private bool _syncEnCurso;
 
         public MainWindow()
         {
@@ -91,6 +95,15 @@ namespace LabInventario.Windows
                 else if (tabs.SelectedItem is TabItem { Content: PrestamosView })
                     _historial.Actualizar();
             };
+
+            // Revisión automática de la hoja de Google: sube el historial
+            // pendiente y, en sesión de administrador, propone los cambios
+            // del catálogo para confirmar. No hace nada si la
+            // sincronización no está configurada.
+            _syncTimer.Tick += async (_, _) => await CicloSincronizacionAsync();
+            _syncTimer.Interval = TimeSpan.FromMinutes(_sync.IntervaloMinutos());
+            _syncTimer.Start();
+            Closed += (_, _) => _syncTimer.Stop();
 
             // Listón institucional: una franja delgada azul→dorado justo
             // arriba de las pestañas. Es el único "bloque" de color
@@ -178,6 +191,14 @@ namespace LabInventario.Windows
                     await dialogo.ShowDialog(this);
                 };
 
+                var itemConfigSync = new MenuItem { Header = "Configuración de sincronización…" };
+                itemConfigSync.Click += async (_, _) =>
+                {
+                    var dialogo = new ConfiguracionSincronizacionDialog();
+                    await dialogo.ShowDialog(this);
+                    _syncTimer.Interval = TimeSpan.FromMinutes(_sync.IntervaloMinutos());
+                };
+
                 var itemLimpiarHistorial = new MenuItem { Header = "Limpiar historial antiguo..." };
                 itemLimpiarHistorial.Click += async (_, _) =>
                 {
@@ -210,11 +231,51 @@ namespace LabInventario.Windows
                 var menuAdmin = new MenuItem { Header = "Administración" };
                 menuAdmin.Items.Add(itemPassword);
                 menuAdmin.Items.Add(itemConfigEscaneo);
+                menuAdmin.Items.Add(itemConfigSync);
                 menuAdmin.Items.Add(itemLimpiarHistorial);
                 items.Add(menuAdmin);
             }
 
             return items;
+        }
+
+        /// <summary>
+        /// Un ciclo de sincronización: sube el historial pendiente y, si la
+        /// sesión es de administrador, revisa la hoja buscando cambios del
+        /// catálogo para proponerlos en diálogo. Con reentrancia protegida
+        /// y sin tumbar la app ante fallos de red.
+        /// </summary>
+        private async Task CicloSincronizacionAsync()
+        {
+            if (_syncEnCurso || !_sync.Configurada) return;
+            _syncEnCurso = true;
+            try
+            {
+                await _sync.SubirHistorialAsync();
+                if (!SesionActual.EsAdministrador) return;
+
+                var cambios = await _sync.ObtenerCambiosPendientesAsync();
+                if (cambios.Count == 0) return;
+
+                var dialogo = new ConfirmarCambiosDialog(cambios);
+                await dialogo.ShowDialog(this);
+                if (!dialogo.Confirmado) return;
+
+                var resultado = await _sync.AplicarCambiosAsync(cambios);
+                await Dialogos.MostrarInfo(this,
+                    $"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}." +
+                    (resultado.Bloqueados.Count > 0 ? "\n\nBloqueados:\n- " + string.Join("\n- ", resultado.Bloqueados) : ""),
+                    "Sincronización");
+            }
+            catch (Exception ex)
+            {
+                Errores.RegistrarEnArchivo(ex);
+            }
+            finally
+            {
+                _syncEnCurso = false;
+                _syncTimer.Interval = TimeSpan.FromMinutes(_sync.IntervaloMinutos());
+            }
         }
     }
 }

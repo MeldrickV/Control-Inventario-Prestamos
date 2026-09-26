@@ -94,6 +94,11 @@ namespace LabInventario
                 mainWindow.Show();
                 await EsperarCierre(mainWindow);
 
+                // Al cerrar la ventana (salga o cierre sesión) se intenta
+                // subir el historial nuevo a la hoja de Google. Es mejor
+                // esfuerzo con tiempo límite: nunca bloquea la salida.
+                await IntentarSubirHistorialAlCerrarAsync();
+
                 if (!mainWindow.SolicitoCerrarSesion)
                 {
                     desktop.Shutdown();
@@ -108,6 +113,22 @@ namespace LabInventario
             var tcs = new TaskCompletionSource();
             ventana.Closed += (_, _) => tcs.TrySetResult();
             return tcs.Task;
+        }
+
+        private static async Task IntentarSubirHistorialAlCerrarAsync()
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                await new SincronizacionService().SubirHistorialAsync(cts.Token);
+            }
+            catch (Exception ex)
+            {
+                // Si no hay red o la hoja no responde, el marcador local no
+                // avanza y se reintenta en la próxima apertura; solo se deja
+                // rastro en el log para diagnóstico.
+                Errores.RegistrarEnArchivo(ex);
+            }
         }
     }
 }

@@ -202,8 +202,8 @@ namespace LabInventario.Services
             if (rango.Valores.Count == 0) return null;
             var primera = rango.Valores[0];
             var esEncabezado = primera.Count >= encabezado.Length &&
-                primera.Take(encabezado.Length).All((v, i) =>
-                    string.Equals(v?.Trim(), encabezado[i], StringComparison.OrdinalIgnoreCase));
+                primera.Take(encabezado.Length).Select((v, i) =>
+                    string.Equals(v?.Trim(), encabezado[i], StringComparison.OrdinalIgnoreCase)).All(x => x);
             var datos = (esEncabezado ? rango.Valores.Skip(1) : rango.Valores)
                 .Where(f => f.Any(c => !string.IsNullOrWhiteSpace(c)))
                 .Select(f => NormalizarFila(f, encabezado.Length))

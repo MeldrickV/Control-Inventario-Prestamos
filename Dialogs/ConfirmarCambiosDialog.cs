@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
 using LabInventario.Services;
 using SukiUI.Controls;
 

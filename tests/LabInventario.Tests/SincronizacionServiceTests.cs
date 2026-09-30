@@ -266,7 +266,7 @@ namespace LabInventario.Tests
             await _sync.AplicarCambiosAsync(cambios);
             await _sync.ConfirmarCambiosConsumidosAsync();
 
-            Assert.Equal(3, _fake.Leer(HojaCambios, "Alumnos").Count); // no se borró
+            Assert.Equal(4, _fake.Leer(HojaCambios, "Alumnos").Count); // encabezado + 3 filas: no se borró
             var pendientes = await _sync.ObtenerCambiosPendientesAsync();
             Assert.Single(pendientes); // solo la fila realmente nueva
             Assert.Equal("33333333", pendientes[0].Clave);

@@ -221,11 +221,13 @@ namespace LabInventario.Tests
             _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
             {
                 new() { "Nombre", "NumeroCuenta" },
+                new() { NombreAlumno, CuentaAlumno },
                 new() { "Alumno Nuevo", "22222222" },
             });
             _fake.Sembrar(HojaCambios, "Inventario", new List<List<string>>
             {
                 new() { "Nombre", "CodigoBarras", "CantidadTotal" },
+                new() { NombreMaterial, CodigoMaterial, CantidadTotalMaterial.ToString() },
             });
 
             var cambios = await _sync.ObtenerCambiosPendientesAsync();
@@ -247,6 +249,7 @@ namespace LabInventario.Tests
             _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
             {
                 new() { "Nombre", "NumeroCuenta" },
+                new() { NombreAlumno, CuentaAlumno },
                 new() { "Alumno Nuevo", "22222222" },
             });
 
@@ -255,6 +258,7 @@ namespace LabInventario.Tests
             _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
             {
                 new() { "Nombre", "NumeroCuenta" },
+                new() { NombreAlumno, CuentaAlumno },
                 new() { "Alumno Nuevo", "22222222" },
                 new() { "Otro Más", "33333333" },
             });

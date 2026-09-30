@@ -6,6 +6,7 @@ namespace LabInventario.Tests
     public class SincronizacionServiceTests : BaseDePruebas
     {
         private const string Hoja = "hoja-test";
+        private const string HojaCambios = "cambios-test";
 
         private readonly FakeSheetsClient _fake = new();
         private ConfiguracionRepository _config = null!;
@@ -14,7 +15,8 @@ namespace LabInventario.Tests
         private void ConfigurarSync()
         {
             _config = new ConfiguracionRepository(Db);
-            _config.Establecer(SincronizacionService.ClaveHoja, Hoja);
+            _config.Establecer(SincronizacionService.ClaveArchivo, Hoja);
+            _config.Establecer(SincronizacionService.ClaveCambios, HojaCambios);
             _config.Establecer(SincronizacionService.ClaveComputadora, "LAB-TEST");
             _sync = new SincronizacionService(Db, _config, _fake);
         }
@@ -96,14 +98,14 @@ namespace LabInventario.Tests
             Alumnos.Crear("Otro alumno", "11111111");
             Materiales.Crear("9999999999999", "Otro material", 5);
 
-            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
+            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
             {
                 new() { "Nombre", "NumeroCuenta" },
                 new() { "Ana Sofía Cambiada", CuentaAlumno },   // cambio de nombre
                 new() { "Alumno Nuevo", "22222222" },            // alta
                 // "11111111" ausente → baja
             });
-            _fake.Sembrar(Hoja, "Inventario", new List<List<string>>
+            _fake.Sembrar(HojaCambios, "Inventario", new List<List<string>>
             {
                 new() { "Nombre", "CodigoBarras", "CantidadTotal" },
                 new() { NombreMaterial, CodigoMaterial, CantidadTotalMaterial.ToString() }, // igual
@@ -175,22 +177,25 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task AsegurarHoja_SinId_CreaHojaYEscribeEncabezados()
+        public async Task AsegurarArchivos_SinIds_CreaAmbosYEscribeEncabezados()
         {
             ConfigurarSync();
-            _config.Establecer(SincronizacionService.ClaveHoja, "");
+            _config.Establecer(SincronizacionService.ClaveArchivo, "");
+            _config.Establecer(SincronizacionService.ClaveCambios, "");
 
-            var id = await _sync.AsegurarHojaAsync("LabInventario - LAB-TEST");
+            var id = await _sync.AsegurarArchivosAsync("LabInventario - LAB-TEST", "Cambios - LAB-TEST");
 
             Assert.Equal("hoja-fake-1", id);
-            Assert.Equal("hoja-fake-1", _config.Obtener(SincronizacionService.ClaveHoja));
+            Assert.Equal("hoja-fake-1", _config.Obtener(SincronizacionService.ClaveArchivo));
+            Assert.Equal("hoja-fake-2", _config.Obtener(SincronizacionService.ClaveCambios));
             Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("hoja-fake-1", "Alumnos")[0].ToArray());
             Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer("hoja-fake-1", "Inventario")[0].ToArray());
             Assert.Equal(11, _fake.Leer("hoja-fake-1", "Historial")[0].Count);
+            Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("hoja-fake-2", "Alumnos")[0].ToArray());
         }
 
         [Fact]
-        public async Task AsegurarHoja_Existente_ConservaDatosYSoloAgregaPestanas()
+        public async Task AsegurarArchivos_Existentes_ConservaDatosYSoloAgregaPestanas()
         {
             ConfigurarSync();
             _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
@@ -199,13 +204,68 @@ namespace LabInventario.Tests
                 new() { NombreAlumno, CuentaAlumno },
             });
 
-            var id = await _sync.AsegurarHojaAsync("LabInventario - LAB-TEST");
+            var id = await _sync.AsegurarArchivosAsync("LabInventario - LAB-TEST", "Cambios - LAB-TEST");
 
             Assert.Equal(Hoja, id);
             var alumnos = _fake.Leer(Hoja, "Alumnos");
             Assert.Equal(2, alumnos.Count); // no duplicó el encabezado ni borró filas
             Assert.Equal(CuentaAlumno, alumnos[1][1]);
             Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer(Hoja, "Inventario")[0].ToArray());
+        }
+
+        [Fact]
+        public async Task ConfirmarCambiosConsumidos_LimpiaArchivoDeCambios()
+        {
+            ConfigurarSync();
+            CrearAlumnoYMaterial();
+            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
+            {
+                new() { "Nombre", "NumeroCuenta" },
+                new() { "Alumno Nuevo", "22222222" },
+            });
+            _fake.Sembrar(HojaCambios, "Inventario", new List<List<string>>
+            {
+                new() { "Nombre", "CodigoBarras", "CantidadTotal" },
+            });
+
+            var cambios = await _sync.ObtenerCambiosPendientesAsync();
+            var resultado = await _sync.AplicarCambiosAsync(cambios);
+            await _sync.ConfirmarCambiosConsumidosAsync();
+
+            Assert.Equal(1, resultado.Aplicados);
+            Assert.NotNull(Alumnos.ObtenerPorCuenta("22222222"));
+            Assert.Single(_fake.Leer(HojaCambios, "Alumnos")); // solo encabezado
+            Assert.Single(_fake.Leer(HojaCambios, "Inventario")); // solo encabezado
+            Assert.Empty(await _sync.ObtenerCambiosPendientesAsync()); // nada pendiente después
+        }
+
+        [Fact]
+        public async Task ConfirmarCambiosConsumidos_ConEdicionIntermedia_NoBorra()
+        {
+            ConfigurarSync();
+            CrearAlumnoYMaterial();
+            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
+            {
+                new() { "Nombre", "NumeroCuenta" },
+                new() { "Alumno Nuevo", "22222222" },
+            });
+
+            var cambios = await _sync.ObtenerCambiosPendientesAsync();
+            // El revisor agrega otra fila antes de que se confirme el consumo.
+            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
+            {
+                new() { "Nombre", "NumeroCuenta" },
+                new() { "Alumno Nuevo", "22222222" },
+                new() { "Otro Más", "33333333" },
+            });
+
+            await _sync.AplicarCambiosAsync(cambios);
+            await _sync.ConfirmarCambiosConsumidosAsync();
+
+            Assert.Equal(3, _fake.Leer(HojaCambios, "Alumnos").Count); // no se borró
+            var pendientes = await _sync.ObtenerCambiosPendientesAsync();
+            Assert.Single(pendientes); // solo la fila realmente nueva
+            Assert.Equal("33333333", pendientes[0].Clave);
         }
 
         [Fact]

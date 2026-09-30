@@ -22,21 +22,23 @@ namespace LabInventario.Services
     }
 
     /// <summary>
-    /// Orquesta la sincronización con la hoja de Google del laboratorio:
-    /// sube el historial nuevo (automático), publica el catálogo completo
-    /// (manual), detecta diferencias del catálogo contra la hoja (para
-    /// confirmar en diálogo) y las aplica de forma idempotente.
+    /// Orquesta la sincronización con el Drive del laboratorio: sube el
+    /// historial nuevo al archivo principal (automático), publica el
+    /// catálogo completo (manual), detecta diferencias en el archivo de
+    /// Cambios que edita el revisor (para confirmar en diálogo), las aplica
+    /// de forma idempotente y deja el archivo de Cambios listo de nuevo.
     ///
-    /// La base local sigue siendo la fuente de verdad; la hoja es el
+    /// La base local sigue siendo la fuente de verdad; Drive es el
     /// buzón/respaldo. El cliente de red (<see cref="ISheetsClient"/>) se
-    /// inyecta: en producción será la implementación con la autenticación
-    /// de Google (aún por decidir) y en pruebas un doble en memoria. Sin
-    /// cliente o sin configurar, los métodos remotos se omiten en silencio
-    /// para no interrumpir la operación local.
+    /// inyecta: en producción es el cliente de Drive con OAuth y en
+    /// pruebas un doble en memoria. Sin cliente o sin configurar, los
+    /// métodos remotos se omiten en silencio para no interrumpir la
+    /// operación local.
     /// </summary>
     public class SincronizacionService
     {
-        public const string ClaveHoja = "Sync.SpreadsheetId";
+        public const string ClaveArchivo = "Sync.DriveArchivoId";
+        public const string ClaveCambios = "Sync.DriveCambiosId";
         public const string ClaveComputadora = "Sync.ComputadoraId";
         public const string ClaveLaboratorio = "Sync.LaboratorioNombre";
         public const string ClaveIntervalo = "Sync.IntervaloMinutos";
@@ -74,10 +76,14 @@ namespace LabInventario.Services
             _prestamos = new PrestamoRepository(_db);
         }
 
-        public string SpreadsheetId => _config.Obtener(ClaveHoja) ?? "";
+        /// <summary>ID del archivo .xlsx principal en Drive (Historial/Alumnos/Inventario).</summary>
+        public string ArchivoId => _config.Obtener(ClaveArchivo) ?? "";
 
-        /// <summary>Hay hoja configurada para sincronizar.</summary>
-        public bool Configurada => !string.IsNullOrWhiteSpace(SpreadsheetId);
+        /// <summary>ID del archivo .xlsx de Cambios en Drive (lo que el revisor edita en su lugar).</summary>
+        public string CambiosId => _config.Obtener(ClaveCambios) ?? "";
+
+        /// <summary>Hay archivo configurado para sincronizar.</summary>
+        public bool Configurada => !string.IsNullOrWhiteSpace(ArchivoId);
 
         /// <summary>Hay cliente de red conectado (la autenticación de Google ya está enchufada).</summary>
         public bool ClienteDisponible => _sheets is not null;
@@ -100,32 +106,45 @@ namespace LabInventario.Services
         };
 
         /// <summary>
-        /// Deja la hoja lista: si no hay ID configurado crea la hoja de
-        /// cálculo con el título sugerido, asegura las tres pestañas y
-        /// escribe el encabezado donde falte. Devuelve el spreadsheetId.
+        /// Deja los archivos listos en Drive: si no hay IDs configurados
+        /// crea el archivo principal y el de Cambios con los títulos
+        /// sugeridos, asegura sus pestañas y escribe el encabezado donde
+        /// falte. Devuelve el ID del archivo principal.
         /// </summary>
-        public async Task<string> AsegurarHojaAsync(string tituloSugerido, CancellationToken ct = default)
+        public async Task<string> AsegurarArchivosAsync(string tituloBase, string tituloCambios, CancellationToken ct = default)
         {
             if (_sheets is null)
-                throw new InvalidOperationException("Cliente de Google Sheets aún no conectado.");
+                throw new InvalidOperationException("Cliente de Google aún no conectado.");
 
-            var id = SpreadsheetId;
-            if (string.IsNullOrWhiteSpace(id))
+            var archivo = ArchivoId;
+            if (string.IsNullOrWhiteSpace(archivo))
             {
-                id = await _sheets.CrearHojaCalculoAsync(tituloSugerido, ct);
-                _config.Establecer(ClaveHoja, id);
+                archivo = await _sheets.CrearHojaCalculoAsync(tituloBase, ct);
+                _config.Establecer(ClaveArchivo, archivo);
             }
 
-            var pestanas = new[] { TabHistorial, TabAlumnos, TabInventario };
-            await _sheets.AsegurarPestanasAsync(id, pestanas, ct);
+            var cambios = CambiosId;
+            if (string.IsNullOrWhiteSpace(cambios))
+            {
+                cambios = await _sheets.CrearHojaCalculoAsync(tituloCambios, ct);
+                _config.Establecer(ClaveCambios, cambios);
+            }
+
+            await AsegurarPestanasConEncabezadoAsync(archivo, new[] { TabHistorial, TabAlumnos, TabInventario }, ct);
+            await AsegurarPestanasConEncabezadoAsync(cambios, new[] { TabAlumnos, TabInventario }, ct);
+            return archivo;
+        }
+
+        private async Task AsegurarPestanasConEncabezadoAsync(string archivoId, string[] pestanas, CancellationToken ct)
+        {
+            await _sheets!.AsegurarPestanasAsync(archivoId, pestanas, ct);
             foreach (var pestana in pestanas)
             {
-                var actual = await _sheets.ObtenerValoresAsync(id, $"{pestana}!A1:Z1", ct);
+                var actual = await _sheets.ObtenerValoresAsync(archivoId, $"{pestana}!A1:Z1", ct);
                 if (actual.Valores.Count == 0)
-                    await _sheets.ActualizarValoresAsync(id, $"{pestana}!A1",
+                    await _sheets.ActualizarValoresAsync(archivoId, $"{pestana}!A1",
                         new List<List<string>> { EncabezadoPara(pestana).ToList() }, ct);
             }
-            return id;
         }
 
         // ---------------- Subida del historial (automática) ----------------
@@ -141,12 +160,12 @@ namespace LabInventario.Services
             var resultado = new ResultadoSubida { Omitido = true };
             if (!Configurada)
             {
-                resultado.Mensaje = "Sincronización no configurada (falta el ID de la hoja).";
+                resultado.Mensaje = "Sincronización no configurada (falta conectar la cuenta).";
                 return resultado;
             }
             if (_sheets is null)
             {
-                resultado.Mensaje = "Cliente de Google Sheets aún no conectado (pendiente la autenticación).";
+                resultado.Mensaje = "Cliente de Google aún no conectado.";
                 return resultado;
             }
 
@@ -170,10 +189,10 @@ namespace LabInventario.Services
                 p.Estado, Guid.NewGuid().ToString("N"),
             }).ToList();
 
-            var confirmadas = await _sheets.AgregarFilasAsync(SpreadsheetId, $"{TabHistorial}!A:K", filas, ct);
+            var confirmadas = await _sheets.AgregarFilasAsync(ArchivoId, $"{TabHistorial}!A:K", filas, ct);
             if (confirmadas < filas.Count)
                 throw new InvalidOperationException(
-                    $"La hoja confirmó {confirmadas} de {filas.Count} filas; se reintentará en la próxima sincronización (marcador sin avanzar).");
+                    $"Drive confirmó {confirmadas} de {filas.Count} filas; se reintentará en la próxima sincronización (marcador sin avanzar).");
 
             var maximo = nuevos.Max(p => p.Id);
             _config.Establecer(ClaveMarcador, maximo.ToString());
@@ -202,35 +221,82 @@ namespace LabInventario.Services
             var filasInventario = new List<List<string>> { EncabezadoInventario.ToList() };
             filasInventario.AddRange(_materiales.Listar().Select(m => new List<string> { m.Nombre, m.CodigoBarras, m.CantidadTotal.ToString() }));
 
-            await _sheets.LimpiarRangoAsync(SpreadsheetId, $"{TabAlumnos}!A:B", ct);
-            await _sheets.ActualizarValoresAsync(SpreadsheetId, $"{TabAlumnos}!A1", filasAlumnos, ct);
-            await _sheets.LimpiarRangoAsync(SpreadsheetId, $"{TabInventario}!A:C", ct);
-            await _sheets.ActualizarValoresAsync(SpreadsheetId, $"{TabInventario}!A1", filasInventario, ct);
+            await _sheets.LimpiarRangoAsync(ArchivoId, $"{TabAlumnos}!A:B", ct);
+            await _sheets.ActualizarValoresAsync(ArchivoId, $"{TabAlumnos}!A1", filasAlumnos, ct);
+            await _sheets.LimpiarRangoAsync(ArchivoId, $"{TabInventario}!A:C", ct);
+            await _sheets.ActualizarValoresAsync(ArchivoId, $"{TabInventario}!A1", filasInventario, ct);
             _config.Establecer(ClaveUltimaSync, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             return filasAlumnos.Count + filasInventario.Count - 2;
         }
 
         // ---------------- Bajada del catálogo (para confirmar) ----------------
 
+        // Foto de lo leído en la última revisión, para solo limpiar el
+        // archivo de Cambios si nadie lo tocó mientras se aplicaba.
+        private List<List<string>>? _vistosAlumnos;
+        private List<List<string>>? _vistosInventario;
+
         /// <summary>
-        /// Lee el catálogo de la hoja y lo compara con la base local por
-        /// clave de negocio, devolviendo altas, cambios y bajas. Si una
-        /// pestaña llega vacía (hoja nueva o lectura fallida) no se propone
-        /// nada de esa entidad, para no borrar todo por error.
+        /// Lee el archivo de Cambios (lo que el revisor editó en su lugar
+        /// en Drive) y lo compara con la base local por clave de negocio,
+        /// devolviendo altas, cambios y bajas. Si una pestaña llega vacía
+        /// (archivo nuevo o lectura fallida) no se propone nada de esa
+        /// entidad, para no borrar todo por error.
         /// </summary>
         public async Task<List<CambioSincronizacion>> ObtenerCambiosPendientesAsync(CancellationToken ct = default)
         {
             var cambios = new List<CambioSincronizacion>();
-            if (!Configurada || _sheets is null) return cambios;
+            _vistosAlumnos = null;
+            _vistosInventario = null;
+            if (!Configurada || _sheets is null || string.IsNullOrWhiteSpace(CambiosId)) return cambios;
 
-            var alumnosHoja = await _sheets.ObtenerValoresAsync(SpreadsheetId, $"{TabAlumnos}!A:B", ct);
-            var inventarioHoja = await _sheets.ObtenerValoresAsync(SpreadsheetId, $"{TabInventario}!A:C", ct);
+            var alumnosHoja = await _sheets.ObtenerValoresAsync(CambiosId, $"{TabAlumnos}!A:B", ct);
+            var inventarioHoja = await _sheets.ObtenerValoresAsync(CambiosId, $"{TabInventario}!A:C", ct);
 
             var filasAlumnos = FilasDeDatos(alumnosHoja, EncabezadoAlumnos);
             var filasInventario = FilasDeDatos(inventarioHoja, EncabezadoInventario);
-            if (filasAlumnos is not null) cambios.AddRange(DiferenciasAlumnos(filasAlumnos));
-            if (filasInventario is not null) cambios.AddRange(DiferenciasMateriales(filasInventario));
+            if (filasAlumnos is not null)
+            {
+                _vistosAlumnos = filasAlumnos.Select(f => f.ToList()).ToList();
+                cambios.AddRange(DiferenciasAlumnos(filasAlumnos));
+            }
+            if (filasInventario is not null)
+            {
+                _vistosInventario = filasInventario.Select(f => f.ToList()).ToList();
+                cambios.AddRange(DiferenciasMateriales(filasInventario));
+            }
             return cambios;
+        }
+
+        /// <summary>
+        /// Tras aplicar los cambios confirmados, deja el archivo de Cambios
+        /// listo para la siguiente ronda (solo encabezados). Solo limpia si
+        /// el contenido sigue igual a lo revisado: si el revisor editó en
+        /// ese lapso, se conserva para el próximo ciclo.
+        /// </summary>
+        public async Task ConfirmarCambiosConsumidosAsync(CancellationToken ct = default)
+        {
+            if (!Configurada || _sheets is null || string.IsNullOrWhiteSpace(CambiosId)) return;
+            await LimpiarSiSigueIgualAsync(TabAlumnos, EncabezadoAlumnos, _vistosAlumnos, ct);
+            await LimpiarSiSigueIgualAsync(TabInventario, EncabezadoInventario, _vistosInventario, ct);
+            _vistosAlumnos = null;
+            _vistosInventario = null;
+        }
+
+        private async Task LimpiarSiSigueIgualAsync(string pestana, string[] encabezado, List<List<string>>? vistos, CancellationToken ct)
+        {
+            if (vistos is null) return;
+            var actual = await _sheets!.ObtenerValoresAsync(CambiosId, $"{pestana}!A:Z", ct);
+            var filas = FilasDeDatos(actual, encabezado) ?? new List<List<string>>();
+            if (!MismasFilas(filas, vistos)) return;
+            await _sheets.ActualizarValoresAsync(CambiosId, $"{pestana}!A1",
+                new List<List<string>> { encabezado.ToList() }, ct);
+        }
+
+        private static bool MismasFilas(List<List<string>> a, List<List<string>>? b)
+        {
+            if (b is null || a.Count != b.Count) return false;
+            return a.Zip(b).All(par => par.First.SequenceEqual(par.Second));
         }
 
         private static List<List<string>>? FilasDeDatos(RangoValores rango, string[] encabezado)

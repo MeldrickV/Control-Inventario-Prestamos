@@ -8,9 +8,9 @@ namespace LabInventario.Dialogs
 {
     /// <summary>
     /// Muestra los cambios del catálogo (alumnos e inventario) detectados
-    /// en la hoja de Google y pide confirmación antes de aplicarlos en la
-    /// base local. Cada línea describe "lo que se está enviando" (alta,
-    /// cambio o baja con sus valores).
+    /// en el archivo de Cambios de Drive y pide confirmación antes de
+    /// aplicarlos en la base local. Cada línea describe "lo que se está
+    /// enviando" (alta, cambio o baja con sus valores).
     /// </summary>
     public class ConfirmarCambiosDialog : SukiWindow
     {
@@ -19,7 +19,7 @@ namespace LabInventario.Dialogs
 
         public ConfirmarCambiosDialog(IList<CambioSincronizacion> cambios)
         {
-            Title = "Cambios pendientes desde Google Sheets";
+            Title = "Cambios pendientes desde Drive";
             CanResize = false;
             CanMinimize = false;
             CanFullScreen = false;
@@ -41,8 +41,8 @@ namespace LabInventario.Dialogs
             var panel = new StackPanel { Spacing = 8, Width = 520 };
             panel.Children.Add(new TextBlock
             {
-                Text = "La hoja de Google trae estos cambios para el catálogo local. " +
-                       "Revísalos y decide si se aplican:",
+                Text = "El archivo de Cambios trae estas propuestas para el catálogo local. " +
+                       "Revísalas y decide si se aplican:",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 520,

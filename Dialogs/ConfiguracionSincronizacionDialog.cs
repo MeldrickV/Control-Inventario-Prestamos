@@ -40,7 +40,7 @@ namespace LabInventario.Dialogs
 
             _txtComputadora.Text = _config.Obtener(SincronizacionService.ClaveComputadora) ?? "";
             _txtLaboratorio.Text = _config.Obtener(SincronizacionService.ClaveLaboratorio) ?? "";
-            _txtHoja.Text = _config.Obtener(SincronizacionService.ClaveHoja) ?? "";
+            _txtHoja.Text = _config.Obtener(SincronizacionService.ClaveArchivo) ?? "";
             _txtClientId.Text = _config.Obtener(GoogleOAuthClient.ClaveClientId) ?? "";
             _txtClientSecret.Text = _config.Obtener(GoogleOAuthClient.ClaveClientSecret) ?? "";
             _numIntervalo.Value = new SincronizacionService().IntervaloMinutos();
@@ -58,8 +58,8 @@ namespace LabInventario.Dialogs
             var panel = new StackPanel { Spacing = 8, Width = 340 };
             panel.Children.Add(new TextBlock
             {
-                Text = "Identifica esta computadora y la hoja de Google de su laboratorio. " +
-                       "Sin el ID de la hoja la sincronización queda desactivada.",
+                Text = "Identifica esta computadora y sus archivos en el Drive del laboratorio. " +
+                       "Sin cuenta conectada la sincronización queda desactivada.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 340,
@@ -68,7 +68,7 @@ namespace LabInventario.Dialogs
             panel.Children.Add(_txtComputadora);
             panel.Children.Add(new TextBlock { Text = "Nombre del laboratorio:", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
             panel.Children.Add(_txtLaboratorio);
-            panel.Children.Add(new TextBlock { Text = "ID de la hoja de cálculo (se llena solo al conectar):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
+            panel.Children.Add(new TextBlock { Text = "ID del archivo en Drive (se llena solo al conectar):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
             panel.Children.Add(_txtHoja);
             panel.Children.Add(new TextBlock { Text = "Client ID de Google (OAuth, una vez por institución):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
             panel.Children.Add(_txtClientId);
@@ -100,7 +100,7 @@ namespace LabInventario.Dialogs
             panel.Children.Add(new TextBlock
             {
                 Text = "Al conectar se abre el navegador para iniciar sesión; si esta computadora " +
-                       "aún no tiene hoja, se crea sola con las pestañas necesarias.",
+                       "aún no tiene archivos, se crean solos en su Drive con las pestañas necesarias.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 340,
@@ -143,12 +143,13 @@ namespace LabInventario.Dialogs
             if (!conectado) return;
 
             var compu = _txtComputadora.Text?.Trim() ?? "";
+            var etiqueta = compu.Length > 0 ? compu : "Laboratorio";
             var servicio = new SincronizacionService(sheets: _oauth);
-            var id = await servicio.AsegurarHojaAsync("LabInventario - " + (compu.Length > 0 ? compu : "Laboratorio"));
+            var id = await servicio.AsegurarArchivosAsync("LabInventario - " + etiqueta, "Cambios - " + etiqueta);
             _txtHoja.Text = id;
             GuardarCampos();
             ActualizarEstado();
-            await Dialogos.MostrarInfo(this, "Cuenta conectada y hoja lista para sincronizar.", "Listo");
+            await Dialogos.MostrarInfo(this, "Cuenta conectada y archivos listos en Drive para sincronizar.", "Listo");
             Close();
         }
 
@@ -176,7 +177,7 @@ namespace LabInventario.Dialogs
         {
             _config.Establecer(SincronizacionService.ClaveComputadora, _txtComputadora.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveLaboratorio, _txtLaboratorio.Text?.Trim() ?? "");
-            _config.Establecer(SincronizacionService.ClaveHoja, _txtHoja.Text?.Trim() ?? "");
+            _config.Establecer(SincronizacionService.ClaveArchivo, _txtHoja.Text?.Trim() ?? "");
             _config.Establecer(GoogleOAuthClient.ClaveClientId, _txtClientId.Text?.Trim() ?? "");
             _config.Establecer(GoogleOAuthClient.ClaveClientSecret, _txtClientSecret.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveIntervalo, ((int)(_numIntervalo.Value ?? 5)).ToString());

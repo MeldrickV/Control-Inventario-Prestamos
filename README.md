@@ -148,11 +148,18 @@ Si el patrón no permite determinar correctamente el tipo de código, la aplicac
 
 La búsqueda de alumnos por número de cuenta es tolerante a guiones: escanear `18458688` o `1845868-8` encuentra al mismo alumno, porque si la coincidencia exacta falla se compara el número de cuenta sin guiones.
 
-## Sincronización con Google Sheets
+## Sincronización con Google Drive
 
-Cada laboratorio sincroniza con **su propia hoja de cálculo de Google** (una por computadora): la base local sigue siendo la fuente de verdad y la hoja es el buzón/respaldo en la nube.
+Cada laboratorio sincroniza con **su propia cuenta de Google** (una por computadora): la app crea y edita archivos `.xlsx` en ese Drive con el login del administrador. Sin instalar nada extra en la PC y sin que el usuario toque la consola de Google. La base local sigue siendo la fuente de verdad y Drive es el buzón/respaldo en la nube.
 
-Estructura de cada hoja (pestañas con encabezado en la primera fila):
+Archivos por laboratorio (carpeta `LabInventario`, creados solos por la app):
+
+```text
+LabInventario - LAB-X.xlsx   (pestañas: Historial, Alumnos, Inventario)
+Cambios - LAB-X.xlsx          (pestañas: Alumnos, Inventario — lo edita el revisor en su lugar)
+```
+
+Columnas (encabezado en la primera fila):
 
 ```text
 Historial   → PrestamoId, Alumno, NumeroCuenta, Material, CodigoBarras, Cantidad, CablesExtra, FechaSalida, FechaRegreso, Estado, SyncId
@@ -162,19 +169,19 @@ Inventario  → Nombre, CodigoBarras, CantidadTotal
 
 Flujos:
 
-- **Subida automática del historial**: al cerrar la aplicación se envían a la pestaña `Historial` los préstamos nuevos (marcador local `Sync.UltimoPrestamoSubido`; sin red queda en cola y se reintenta después, sin duplicar).
-- **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` con el botón "Publicar catálogo" de Exportar datos. Es la única vía de subida del catálogo.
-- **Bajada con confirmación**: la app revisa la hoja al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias en el catálogo se muestra un diálogo con lo que se propone (altas, cambios, bajas) y solo se aplica lo confirmado. Las bajas de registros con historial se bloquean, como en el borrado local.
+- **Subida automática del historial**: al cerrar la aplicación se agregan al `Historial` los préstamos nuevos (marcador local `Sync.UltimoPrestamoSubido`; sin red queda en cola y se reintenta después, sin duplicar).
+- **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` del archivo principal con el botón "Publicar catálogo" de Exportar datos. Es la única vía de subida del catálogo.
+- **Bajada con confirmación**: la app revisa el archivo de `Cambios` (que el revisor edita en su lugar desde Drive web) al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias se muestra un diálogo con lo que se propone (altas, cambios, bajas) y solo se aplica lo confirmado; después el archivo de Cambios vuelve a quedar en encabezados para la siguiente ronda. Las bajas de registros con historial se bloquean, como en el borrado local.
 
 Vinculación con Google (OAuth, todo desde la app ya compilada; un solo ejecutable para todos):
 
-1. **Una sola vez por institución**: en su cuenta de Google Cloud crear un proyecto, habilitar **Google Sheets API**, crear un **OAuth Client ID tipo "App de escritorio"** y poner la pantalla de consentimiento en **Producción** (así la sesión no caduca cada 7 días como en modo Prueba; la app solo pedirá reconectar ante un error real de vinculación).
-2. **En cada computadora (administrador)**: menú `Administración → Configuración de sincronización…` → pegar el **Client ID** y **Client Secret** de su institución, el identificador de la computadora (`LAB-1`, …) y el laboratorio → **Conectar con Google** → se abre el navegador → iniciar sesión con la cuenta de Google del laboratorio → Aceptar. Listo: si no hay hoja, **la app la crea sola** con las pestañas necesarias y guarda el ID.
-3. Cada laboratorio usa **su propia cuenta de Google** (y por tanto su propia hoja): aislamiento natural entre sitios, sin coordinación central y sin recompilar nada.
+1. **Una sola vez por institución**: en su cuenta de Google Cloud crear un proyecto, habilitar **Google Drive API**, crear un **OAuth Client ID tipo "App de escritorio"** y poner la pantalla de consentimiento en **Producción** (así la sesión no caduca cada 7 días como en modo Prueba; la app solo pedirá reconectar ante un error real de vinculación).
+2. **En cada computadora (administrador)**: menú `Administración → Configuración de sincronización…` → pegar el **Client ID** y **Client Secret** de su institución, el identificador de la computadora (`LAB-1`, …) y el laboratorio → **Conectar con Google** → se abre el navegador → iniciar sesión con la cuenta de Google del laboratorio → Aceptar. Listo: si no hay archivos, **la app los crea solos** en Drive con las pestañas necesarias.
+3. Cada laboratorio usa **su propia cuenta de Google** (y por tanto sus propios archivos): aislamiento natural entre sitios, sin coordinación central y sin recompilar nada. La app solo toca lo que ella creó (alcance `drive.file`).
 
 Configuración adicional en el mismo diálogo (solo admin): intervalo de revisión automática (minutos, por defecto 5). Sin cuenta conectada la sincronización queda desactivada sin molestar.
 
-> Nota técnica: el token de refresco se guarda en la tabla `configuracion` de la base local (cifrada con SQLCipher). La lógica habla con Sheets mediante `ISheetsClient` y se prueba en CI con dobles en memoria, sin red.
+> Nota técnica: el token de refresco se guarda en la tabla `configuracion` de la base local (cifrada con SQLCipher). La lógica habla con Drive mediante `ISheetsClient` (el ID de hoja es el ID del archivo .xlsx) y se prueba en CI con dobles en memoria, sin red.
 
 ## Tecnologías utilizadas
 

@@ -13,9 +13,11 @@ namespace LabInventario.Services
     /// todo es automático, incluido crear la hoja si no existe.
     ///
     /// Implementa <see cref="ISheetsClient"/> delegando en
-    /// <see cref="SheetsRestClient"/>: cuando la autenticación está lista,
+    /// <see cref="DriveFilesClient"/>: cuando la autenticación está lista,
     /// una instancia de esta clase ES el cliente que usa
-    /// <see cref="SincronizacionService"/>.
+    /// <see cref="SincronizacionService"/>. Opera sobre archivos .xlsx en
+    /// el Drive de la cuenta (alcance drive.file: solo lo creado por la
+    /// app), sin instalar nada extra en la PC.
     ///
     /// El ClientId/Secret se capturan en el diálogo de sincronización
     /// (solo administrador) y se guardan en la base local: cada
@@ -30,14 +32,14 @@ namespace LabInventario.Services
         public const string ClaveClientSecret = "Sync.OAuthClientSecret";
         public const string ClaveRefreshToken = "Sync.OAuthRefreshToken";
 
-        private const string Scope = "https://www.googleapis.com/auth/spreadsheets";
+        private const string Scope = "https://www.googleapis.com/auth/drive.file";
         private const string UrlAutorizar = "https://accounts.google.com/o/oauth2/v2/auth";
         private const string UrlToken = "https://oauth2.googleapis.com/token";
         private const string UrlRevocar = "https://oauth2.googleapis.com/revoke";
 
         private readonly ConfiguracionRepository _config;
         private readonly HttpClient _http;
-        private readonly SheetsRestClient _rest;
+        private readonly DriveFilesClient _drive;
         private string? _accessToken;
         private DateTime _expira = DateTime.MinValue;
 
@@ -46,7 +48,7 @@ namespace LabInventario.Services
             var baseDatos = db ?? DatabaseManager.Instancia;
             _config = config ?? new ConfiguracionRepository(baseDatos);
             _http = http ?? new HttpClient();
-            _rest = new SheetsRestClient(_http, ObtenerTokenAsync);
+            _drive = new DriveFilesClient(_http, ObtenerTokenAsync);
         }
 
         /// <summary>Client ID capturado en la configuración (diálogo del administrador).</summary>
@@ -252,18 +254,20 @@ namespace LabInventario.Services
             return puerto;
         }
 
-        // ISheetsClient: todo se delega al cliente REST con el token OAuth.
+        // ISheetsClient: todo se delega al cliente de Drive con el token OAuth.
+        // Aquí spreadsheetId es el ID del archivo .xlsx en Drive y el rango
+        // indica la pestaña ("Alumnos!A:B").
         public Task<RangoValores> ObtenerValoresAsync(string spreadsheetId, string rango, CancellationToken ct = default) =>
-            _rest.ObtenerValoresAsync(spreadsheetId, rango, ct);
+            _drive.ObtenerValoresAsync(spreadsheetId, rango, ct);
         public Task<int> AgregarFilasAsync(string spreadsheetId, string rango, List<List<string>> filas, CancellationToken ct = default) =>
-            _rest.AgregarFilasAsync(spreadsheetId, rango, filas, ct);
+            _drive.AgregarFilasAsync(spreadsheetId, rango, filas, ct);
         public Task ActualizarValoresAsync(string spreadsheetId, string rango, List<List<string>> filas, CancellationToken ct = default) =>
-            _rest.ActualizarValoresAsync(spreadsheetId, rango, filas, ct);
+            _drive.ActualizarValoresAsync(spreadsheetId, rango, filas, ct);
         public Task LimpiarRangoAsync(string spreadsheetId, string rango, CancellationToken ct = default) =>
-            _rest.LimpiarRangoAsync(spreadsheetId, rango, ct);
+            _drive.LimpiarRangoAsync(spreadsheetId, rango, ct);
         public Task<string> CrearHojaCalculoAsync(string titulo, CancellationToken ct = default) =>
-            _rest.CrearHojaCalculoAsync(titulo, ct);
+            _drive.CrearHojaCalculoAsync(titulo, ct);
         public Task AsegurarPestanasAsync(string spreadsheetId, string[] pestanas, CancellationToken ct = default) =>
-            _rest.AsegurarPestanasAsync(spreadsheetId, pestanas, ct);
+            _drive.AsegurarPestanasAsync(spreadsheetId, pestanas, ct);
     }
 }

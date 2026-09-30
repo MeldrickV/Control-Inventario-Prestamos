@@ -270,6 +270,7 @@ namespace LabInventario.Windows
                 if (!dialogo.Confirmado) return;
 
                 var resultado = await sync.AplicarCambiosAsync(cambios);
+                await sync.ConfirmarCambiosConsumidosAsync();
                 await Dialogos.MostrarInfo(this,
                     $"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}." +
                     (resultado.Bloqueados.Count > 0 ? "\n\nBloqueados:\n- " + string.Join("\n- ", resultado.Bloqueados) : ""),

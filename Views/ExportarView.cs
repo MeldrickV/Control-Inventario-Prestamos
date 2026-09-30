@@ -129,7 +129,7 @@ namespace LabInventario.Views
             raiz.Children.Add(panelCajas);
             raiz.Children.Add(new Border { Height = 10 });
 
-            var cajaSync = Cajas.GroupBox("Sincronización con Google Sheets", ConstruirPanelSync());
+            var cajaSync = Cajas.GroupBox("Sincronización con Google Drive", ConstruirPanelSync());
             DockPanel.SetDock(cajaSync, Dock.Top);
             raiz.Children.Add(cajaSync);
             raiz.Children.Add(new Border { Height = 10 });
@@ -219,7 +219,7 @@ namespace LabInventario.Views
             var sync = NuevaSync();
             if (!sync.Configurada)
             {
-                _lblSyncEstado.Text = "Estado: sin conectar. Usa Configurar → Conectar con Google.";
+                _lblSyncEstado.Text = "Estado: sin conectar. Usa Configurar → pega el Client ID/Secret → Conectar con Google.";
                 return;
             }
             var ultima = sync.UltimaSincronizacion;
@@ -246,7 +246,7 @@ namespace LabInventario.Views
             var cambios = await sync.ObtenerCambiosPendientesAsync();
             if (cambios.Count == 0)
             {
-                await Dialogos.MostrarInfo(propietaria, subida.Mensaje + "\nNo hay cambios pendientes en la hoja.", "Sincronización");
+                await Dialogos.MostrarInfo(propietaria, subida.Mensaje + "\nNo hay cambios pendientes en el archivo de Cambios.", "Sincronización");
                 return;
             }
 
@@ -254,11 +254,12 @@ namespace LabInventario.Views
             await dialogo.ShowDialog(propietaria);
             if (!dialogo.Confirmado)
             {
-                Log("Cambios de la hoja rechazados por el administrador.");
+                Log("Cambios del archivo de Cambios rechazados por el administrador.");
                 return;
             }
 
             var resultado = await sync.AplicarCambiosAsync(cambios);
+            await sync.ConfirmarCambiosConsumidosAsync();
             Log($"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}.");
             foreach (var bloqueado in resultado.Bloqueados)
                 Log("Bloqueado: " + bloqueado);
@@ -282,12 +283,12 @@ namespace LabInventario.Views
             }
 
             var confirmar = await Dialogos.Confirmar(propietaria,
-                "Se reescribirán las pestañas Alumnos e Inventario de la hoja con el catálogo local actual.\n\n¿Continuar?",
+                "Se reescribirán las pestañas Alumnos e Inventario del archivo en Drive con el catálogo local actual.\n\n¿Continuar?",
                 "Publicar catálogo");
             if (!confirmar) return;
 
             var filas = await sync.PublicarCatalogoAsync();
-            Log($"Catálogo publicado en la hoja: {filas} fila(s).");
+            Log($"Catálogo publicado en Drive: {filas} fila(s).");
             await Dialogos.MostrarInfo(propietaria, "Catálogo publicado.", "Sincronización");
             ActualizarEstadoSync();
         }

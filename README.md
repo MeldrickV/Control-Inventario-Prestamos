@@ -166,13 +166,13 @@ Flujos:
 - **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` con el botón "Publicar catálogo" de Exportar datos. Es la única vía de subida del catálogo.
 - **Bajada con confirmación**: la app revisa la hoja al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias en el catálogo se muestra un diálogo con lo que se propone (altas, cambios, bajas) y solo se aplica lo confirmado. Las bajas de registros con historial se bloquean, como en el borrado local.
 
-Vinculación con Google (OAuth, pensada para que el usuario no configure casi nada):
+Vinculación con Google (OAuth, todo desde la app ya compilada; un solo ejecutable para todos):
 
-1. **Una sola vez (responsable del despliegue)**: en Google Cloud crear un proyecto, habilitar **Google Sheets API** y crear un **OAuth Client ID tipo "App de escritorio"**; pegar el Client ID y Secret en `Services/GoogleOAuthClient.cs` (`ClientId` / `ClientSecret`). Los usuarios finales nunca tocan la consola de Google.
-2. **En cada computadora (administrador)**: menú `Administración → Configuración de sincronización…` → **Conectar con Google** → se abre el navegador → iniciar sesión con la cuenta de Google del laboratorio → Aceptar. Listo: si no hay hoja, **la app la crea sola** con las pestañas necesarias y guarda el ID.
-3. Cada laboratorio usa **su propia cuenta de Google** (y por tanto su propia hoja): aislamiento natural entre sitios, sin coordinación central.
+1. **Una sola vez por institución**: en su cuenta de Google Cloud crear un proyecto, habilitar **Google Sheets API**, crear un **OAuth Client ID tipo "App de escritorio"** y poner la pantalla de consentimiento en **Producción** (así la sesión no caduca cada 7 días como en modo Prueba; la app solo pedirá reconectar ante un error real de vinculación).
+2. **En cada computadora (administrador)**: menú `Administración → Configuración de sincronización…` → pegar el **Client ID** y **Client Secret** de su institución, el identificador de la computadora (`LAB-1`, …) y el laboratorio → **Conectar con Google** → se abre el navegador → iniciar sesión con la cuenta de Google del laboratorio → Aceptar. Listo: si no hay hoja, **la app la crea sola** con las pestañas necesarias y guarda el ID.
+3. Cada laboratorio usa **su propia cuenta de Google** (y por tanto su propia hoja): aislamiento natural entre sitios, sin coordinación central y sin recompilar nada.
 
-Configuración adicional en el mismo diálogo (solo admin): identificador de la computadora (`LAB-1`, …), nombre del laboratorio e intervalo de revisión automática (minutos, por defecto 5). Sin cuenta conectada la sincronización queda desactivada sin molestar.
+Configuración adicional en el mismo diálogo (solo admin): intervalo de revisión automática (minutos, por defecto 5). Sin cuenta conectada la sincronización queda desactivada sin molestar.
 
 > Nota técnica: el token de refresco se guarda en la tabla `configuracion` de la base local (cifrada con SQLCipher). La lógica habla con Sheets mediante `ISheetsClient` y se prueba en CI con dobles en memoria, sin red.
 

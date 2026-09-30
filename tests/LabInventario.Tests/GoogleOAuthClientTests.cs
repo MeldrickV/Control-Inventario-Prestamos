@@ -92,6 +92,28 @@ namespace LabInventario.Tests
             Assert.Null(GoogleOAuthClient.CrearSiConectado(Db));
         }
 
+        [Fact]
+        public async Task ConectarAsync_SinClientId_LanzaIndicandoDondeCapturarlo()
+        {
+            var cliente = CrearCliente();
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => cliente.ConectarAsync());
+            Assert.Contains("Configuración de sincronización", ex.Message);
+        }
+
+        [Fact]
+        public void CredencialesOAuth_SeGuardanYLeenDeConfiguracion()
+        {
+            var config = new ConfiguracionRepository(Db);
+            config.Establecer(GoogleOAuthClient.ClaveClientId, "id-institucion");
+            config.Establecer(GoogleOAuthClient.ClaveClientSecret, "secreto-institucion");
+
+            var cliente = new GoogleOAuthClient(Db, config, new HttpClient(_manejador));
+
+            Assert.True(cliente.ConfiguradoOAuth);
+            Assert.Equal("id-institucion", cliente.ClientId);
+        }
+
         [Theory]
         [InlineData("http://127.0.0.1:8080/?code=4/ABC123&scope=x", "4/ABC123")]
         [InlineData("4/XYZ789", "4/XYZ789")]

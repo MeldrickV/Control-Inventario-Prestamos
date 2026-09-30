@@ -17,18 +17,17 @@ namespace LabInventario.Services
     /// una instancia de esta clase ES el cliente que usa
     /// <see cref="SincronizacionService"/>.
     ///
-    /// El ClientId/Secret los pega UNA vez el responsable del despliegue
-    /// (un OAuth Client ID tipo "App de escritorio" en Google Cloud); los
-    /// usuarios finales nunca tocan la consola de Google.
+    /// El ClientId/Secret se capturan en el diálogo de sincronización
+    /// (solo administrador) y se guardan en la base local: cada
+    /// institución crea UNA vez su OAuth Client ID tipo "App de
+    /// escritorio" en su propia cuenta de Google Cloud y pega aquí los
+    /// valores. Un solo ejecutable sirve para todos los laboratorios y
+    /// facultades, sin recompilar nada.
     /// </summary>
     public class GoogleOAuthClient : ISheetsClient
     {
-        // TODO(despliegue): crear un OAuth Client ID ("App de escritorio")
-        // en Google Cloud con acceso a Google Sheets API y pegar aquí los
-        // valores. Sin esto, ConectarAsync explica qué falta.
-        public const string ClientId = "TU_CLIENT_ID_DE_GOOGLE";
-        public const string ClientSecret = "TU_CLIENT_SECRET_DE_GOOGLE";
-
+        public const string ClaveClientId = "Sync.OAuthClientId";
+        public const string ClaveClientSecret = "Sync.OAuthClientSecret";
         public const string ClaveRefreshToken = "Sync.OAuthRefreshToken";
 
         private const string Scope = "https://www.googleapis.com/auth/spreadsheets";
@@ -50,9 +49,14 @@ namespace LabInventario.Services
             _rest = new SheetsRestClient(_http, ObtenerTokenAsync);
         }
 
-        /// <summary>El responsable del despliegue ya pegó ClientId y Secret.</summary>
-        public static bool ConfiguradoOAuth =>
-            ClientId != "TU_CLIENT_ID_DE_GOOGLE" && ClientSecret != "TU_CLIENT_SECRET_DE_GOOGLE";
+        /// <summary>Client ID capturado en la configuración (diálogo del administrador).</summary>
+        public string ClientId => _config.Obtener(ClaveClientId) ?? "";
+
+        /// <summary>Client Secret capturado en la configuración (diálogo del administrador).</summary>
+        public string ClientSecret => _config.Obtener(ClaveClientSecret) ?? "";
+
+        /// <summary>Ya se capturaron Client ID y Secret en la configuración.</summary>
+        public bool ConfiguradoOAuth => ClientId.Length > 0 && ClientSecret.Length > 0;
 
         /// <summary>Hay refresh token guardado: la cuenta ya se conectó.</summary>
         public bool EstaConectado => !string.IsNullOrWhiteSpace(_config.Obtener(ClaveRefreshToken));
@@ -75,8 +79,9 @@ namespace LabInventario.Services
         {
             if (!ConfiguradoOAuth)
                 throw new InvalidOperationException(
-                    "Falta el OAuth Client ID en el código (GoogleOAuthClient.ClientId/Secret). " +
-                    "El responsable del despliegue debe crearlo una vez en Google Cloud.");
+                    "Falta el Client ID o Secret de Google: créalos una vez en Google Cloud " +
+                    "(OAuth Client ID tipo «App de escritorio» con acceso a Google Sheets API) y " +
+                    "captúralos en Configuración de sincronización.");
 
             var puerto = PuertoLibre();
             var redirectUri = $"http://127.0.0.1:{puerto}/";

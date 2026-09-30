@@ -37,7 +37,6 @@ namespace LabInventario.Services
     public class SincronizacionService
     {
         public const string ClaveHoja = "Sync.SpreadsheetId";
-        public const string ClaveCredenciales = "Sync.CredencialesJsonRuta";
         public const string ClaveComputadora = "Sync.ComputadoraId";
         public const string ClaveLaboratorio = "Sync.LaboratorioNombre";
         public const string ClaveIntervalo = "Sync.IntervaloMinutos";

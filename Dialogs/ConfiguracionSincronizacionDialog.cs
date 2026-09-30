@@ -108,7 +108,13 @@ namespace LabInventario.Dialogs
             });
             panel.Children.Add(panelBotones);
 
-            Content = new GlassCard { Margin = new Avalonia.Thickness(20), Content = panel };
+            // Scroll con altura máxima: el diálogo ya no depende del alto
+            // de la pantalla, lo que no quepa se desplaza.
+            Content = new GlassCard
+            {
+                Margin = new Avalonia.Thickness(20),
+                Content = new ScrollViewer { Content = panel, MaxHeight = 540 },
+            };
             ActualizarEstado();
         }
 
@@ -121,6 +127,9 @@ namespace LabInventario.Dialogs
 
         private async Task ConectarAsync()
         {
+            // Lo capturado en los campos debe quedar en base ANTES de
+            // conectar: el cliente OAuth lee de ahí, no de los TextBox.
+            GuardarCampos();
             bool conectado;
             try
             {

@@ -62,5 +62,25 @@ namespace LabInventario.Tests
             _pestanas[Clave(spreadsheetId, rango)] = new List<List<string>>();
             return Task.CompletedTask;
         }
+
+        private int _contadorHojas;
+
+        public Task<string> CrearHojaCalculoAsync(string titulo, CancellationToken ct = default)
+        {
+            RevisarRed();
+            _contadorHojas++;
+            return Task.FromResult($"hoja-fake-{_contadorHojas}");
+        }
+
+        public Task AsegurarPestanasAsync(string spreadsheetId, string[] pestanas, CancellationToken ct = default)
+        {
+            RevisarRed();
+            foreach (var pestana in pestanas)
+            {
+                var clave = spreadsheetId + "|" + pestana;
+                if (!_pestanas.ContainsKey(clave)) _pestanas[clave] = new List<List<string>>();
+            }
+            return Task.CompletedTask;
+        }
     }
 }

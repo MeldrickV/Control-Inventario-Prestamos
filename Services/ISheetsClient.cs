@@ -35,5 +35,11 @@ namespace LabInventario.Services
 
         /// <summary>Vacía el rango indicado (<c>values.clear</c>).</summary>
         Task LimpiarRangoAsync(string spreadsheetId, string rango, CancellationToken ct = default);
+
+        /// <summary>Crea una hoja de cálculo nueva y devuelve su ID.</summary>
+        Task<string> CrearHojaCalculoAsync(string titulo, CancellationToken ct = default);
+
+        /// <summary>Crea las pestañas que falten en la hoja indicada.</summary>
+        Task AsegurarPestanasAsync(string spreadsheetId, string[] pestanas, CancellationToken ct = default);
     }
 }

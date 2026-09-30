@@ -51,9 +51,16 @@ namespace LabInventario.Windows
         /// opción "solo activos" vigentes al exportar el historial).
         /// </summary>
         private readonly PrestamosView _historial = new();
-        private readonly SincronizacionService _sync = new();
         private readonly DispatcherTimer _syncTimer = new();
         private bool _syncEnCurso;
+
+        /// <summary>
+        /// Servicio de sincronización con el cliente de Google conectado en
+        /// este momento (se crea fresco cada vez para tomar una conexión
+        /// recién hecha sin reiniciar la app).
+        /// </summary>
+        private static SincronizacionService NuevaSync() =>
+            new(sheets: GoogleOAuthClient.CrearSiConectado());
 
         public MainWindow()
         {
@@ -101,7 +108,7 @@ namespace LabInventario.Windows
             // del catálogo para confirmar. No hace nada si la
             // sincronización no está configurada.
             _syncTimer.Tick += async (_, _) => await CicloSincronizacionAsync();
-            _syncTimer.Interval = TimeSpan.FromMinutes(_sync.IntervaloMinutos());
+            _syncTimer.Interval = TimeSpan.FromMinutes(NuevaSync().IntervaloMinutos());
             _syncTimer.Start();
             Closed += (_, _) => _syncTimer.Stop();
 
@@ -196,7 +203,7 @@ namespace LabInventario.Windows
                 {
                     var dialogo = new ConfiguracionSincronizacionDialog();
                     await dialogo.ShowDialog(this);
-                    _syncTimer.Interval = TimeSpan.FromMinutes(_sync.IntervaloMinutos());
+                    _syncTimer.Interval = TimeSpan.FromMinutes(NuevaSync().IntervaloMinutos());
                 };
 
                 var itemLimpiarHistorial = new MenuItem { Header = "Limpiar historial antiguo..." };
@@ -247,21 +254,22 @@ namespace LabInventario.Windows
         /// </summary>
         private async Task CicloSincronizacionAsync()
         {
-            if (_syncEnCurso || !_sync.Configurada) return;
+            var sync = NuevaSync();
+            if (_syncEnCurso || !sync.Configurada) return;
             _syncEnCurso = true;
             try
             {
-                await _sync.SubirHistorialAsync();
+                await sync.SubirHistorialAsync();
                 if (!SesionActual.EsAdministrador) return;
 
-                var cambios = await _sync.ObtenerCambiosPendientesAsync();
+                var cambios = await sync.ObtenerCambiosPendientesAsync();
                 if (cambios.Count == 0) return;
 
                 var dialogo = new ConfirmarCambiosDialog(cambios);
                 await dialogo.ShowDialog(this);
                 if (!dialogo.Confirmado) return;
 
-                var resultado = await _sync.AplicarCambiosAsync(cambios);
+                var resultado = await sync.AplicarCambiosAsync(cambios);
                 await Dialogos.MostrarInfo(this,
                     $"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}." +
                     (resultado.Bloqueados.Count > 0 ? "\n\nBloqueados:\n- " + string.Join("\n- ", resultado.Bloqueados) : ""),
@@ -274,7 +282,7 @@ namespace LabInventario.Windows
             finally
             {
                 _syncEnCurso = false;
-                _syncTimer.Interval = TimeSpan.FromMinutes(_sync.IntervaloMinutos());
+                _syncTimer.Interval = TimeSpan.FromMinutes(NuevaSync().IntervaloMinutos());
             }
         }
     }

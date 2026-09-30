@@ -92,6 +92,43 @@ namespace LabInventario.Services
 
         public string UltimaSincronizacion => _config.Obtener(ClaveUltimaSync) ?? "";
 
+        /// <summary>Encabezado oficial de cada pestaña de la hoja.</summary>
+        public static string[] EncabezadoPara(string pestana) => pestana switch
+        {
+            TabAlumnos => EncabezadoAlumnos,
+            TabInventario => EncabezadoInventario,
+            _ => EncabezadoHistorial,
+        };
+
+        /// <summary>
+        /// Deja la hoja lista: si no hay ID configurado crea la hoja de
+        /// cálculo con el título sugerido, asegura las tres pestañas y
+        /// escribe el encabezado donde falte. Devuelve el spreadsheetId.
+        /// </summary>
+        public async Task<string> AsegurarHojaAsync(string tituloSugerido, CancellationToken ct = default)
+        {
+            if (_sheets is null)
+                throw new InvalidOperationException("Cliente de Google Sheets aún no conectado.");
+
+            var id = SpreadsheetId;
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                id = await _sheets.CrearHojaCalculoAsync(tituloSugerido, ct);
+                _config.Establecer(ClaveHoja, id);
+            }
+
+            var pestanas = new[] { TabHistorial, TabAlumnos, TabInventario };
+            await _sheets.AsegurarPestanasAsync(id, pestanas, ct);
+            foreach (var pestana in pestanas)
+            {
+                var actual = await _sheets.ObtenerValoresAsync(id, $"{pestana}!A1:Z1", ct);
+                if (actual.Valores.Count == 0)
+                    await _sheets.ActualizarValoresAsync(id, $"{pestana}!A1",
+                        new List<List<string>> { EncabezadoPara(pestana).ToList() }, ct);
+            }
+            return id;
+        }
+
         // ---------------- Subida del historial (automática) ----------------
 
         /// <summary>

@@ -175,6 +175,40 @@ namespace LabInventario.Tests
         }
 
         [Fact]
+        public async Task AsegurarHoja_SinId_CreaHojaYEscribeEncabezados()
+        {
+            ConfigurarSync();
+            _config.Establecer(SincronizacionService.ClaveHoja, "");
+
+            var id = await _sync.AsegurarHojaAsync("LabInventario - LAB-TEST");
+
+            Assert.Equal("hoja-fake-1", id);
+            Assert.Equal("hoja-fake-1", _config.Obtener(SincronizacionService.ClaveHoja));
+            Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("hoja-fake-1", "Alumnos")[0].ToArray());
+            Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer("hoja-fake-1", "Inventario")[0].ToArray());
+            Assert.Equal(11, _fake.Leer("hoja-fake-1", "Historial")[0].Count);
+        }
+
+        [Fact]
+        public async Task AsegurarHoja_Existente_ConservaDatosYSoloAgregaPestanas()
+        {
+            ConfigurarSync();
+            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
+            {
+                new() { "Nombre", "NumeroCuenta" },
+                new() { NombreAlumno, CuentaAlumno },
+            });
+
+            var id = await _sync.AsegurarHojaAsync("LabInventario - LAB-TEST");
+
+            Assert.Equal(Hoja, id);
+            var alumnos = _fake.Leer(Hoja, "Alumnos");
+            Assert.Equal(2, alumnos.Count); // no duplicó el encabezado ni borró filas
+            Assert.Equal(CuentaAlumno, alumnos[1][1]);
+            Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer(Hoja, "Inventario")[0].ToArray());
+        }
+
+        [Fact]
         public async Task AplicarCambios_MaterialConservaLoPrestadoAlCambiarTotal()
         {
             ConfigurarSync();

@@ -20,11 +20,13 @@ namespace LabInventario.Dialogs
     public class ConfiguracionSincronizacionDialog : SukiWindow
     {
         private readonly ConfiguracionRepository _config = new();
+        private readonly GoogleOAuthClient _oauth = new();
         private readonly TextBox _txtComputadora = new() { Width = 320 };
         private readonly TextBox _txtLaboratorio = new() { Width = 320 };
         private readonly TextBox _txtHoja = new() { Width = 320 };
         private readonly TextBox _txtCredenciales = new() { Width = 250, IsReadOnly = true };
         private readonly NumericUpDown _numIntervalo = new() { Width = 320, Minimum = 1, Maximum = 120, FormatString = "0" };
+        private readonly TextBlock _lblEstado = new() { TextWrapping = TextWrapping.Wrap, Width = 340 };
 
         public ConfiguracionSincronizacionDialog()
         {
@@ -82,10 +84,23 @@ namespace LabInventario.Dialogs
             panel.Children.Add(panelCredenciales);
             panel.Children.Add(new TextBlock { Text = "Revisar la hoja cada (minutos):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
             panel.Children.Add(_numIntervalo);
+
+            var btnConectar = new Button { Content = "Conectar con Google…", Classes = { "Flat" }, MinWidth = 170 };
+            btnConectar.Click += (_, _) => Errores.Ejecutar(this, ConectarAsync);
+
+            var btnDesconectar = new Button { Content = "Desconectar", Classes = { "Outlined" }, MinWidth = 110 };
+            btnDesconectar.Click += (_, _) => Errores.Ejecutar(this, DesconectarAsync);
+
+            var panelConexion = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Avalonia.Thickness(0, 10, 0, 0) };
+            panelConexion.Children.Add(btnConectar);
+            panelConexion.Children.Add(btnDesconectar);
+            panel.Children.Add(new TextBlock { Text = "Cuenta de Google:", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
+            panel.Children.Add(_lblEstado);
+            panel.Children.Add(panelConexion);
             panel.Children.Add(new TextBlock
             {
-                Text = "Nota: la conexión con Google se activará cuando se defina la autenticación; " +
-                       "estos datos dejan todo preparado.",
+                Text = "Al conectar se abre el navegador para iniciar sesión; si esta computadora " +
+                       "aún no tiene hoja, se crea sola con las pestañas necesarias.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 340,
@@ -94,16 +109,67 @@ namespace LabInventario.Dialogs
             panel.Children.Add(panelBotones);
 
             Content = new GlassCard { Margin = new Avalonia.Thickness(20), Content = panel };
+            ActualizarEstado();
+        }
+
+        private void ActualizarEstado()
+        {
+            _lblEstado.Text = _oauth.EstaConectado
+                ? "Estado: cuenta de Google conectada."
+                : "Estado: sin conectar.";
+        }
+
+        private async Task ConectarAsync()
+        {
+            bool conectado;
+            try
+            {
+                conectado = await _oauth.ConectarAsync(PedirCodigoManualAsync);
+            }
+            catch (InvalidOperationException ex)
+            {
+                await Dialogos.MostrarAdvertencia(this, ex.Message, "No se pudo conectar");
+                return;
+            }
+            if (!conectado) return;
+
+            var compu = _txtComputadora.Text?.Trim() ?? "";
+            var servicio = new SincronizacionService(sheets: _oauth);
+            var id = await servicio.AsegurarHojaAsync("LabInventario - " + (compu.Length > 0 ? compu : "Laboratorio"));
+            _txtHoja.Text = id;
+            GuardarCampos();
+            ActualizarEstado();
+            await Dialogos.MostrarInfo(this, "Cuenta conectada y hoja lista para sincronizar.", "Listo");
+            Close();
+        }
+
+        private async Task DesconectarAsync()
+        {
+            await _oauth.DesconectarAsync();
+            ActualizarEstado();
+            await Dialogos.MostrarInfo(this, "Cuenta de Google desconectada en esta computadora.", "Listo");
+        }
+
+        private async Task<string?> PedirCodigoManualAsync(string url)
+        {
+            var dialogo = new CodigoAuthDialog(url);
+            await dialogo.ShowDialog(this);
+            return dialogo.Codigo;
         }
 
         private void Guardar()
+        {
+            GuardarCampos();
+            Close();
+        }
+
+        private void GuardarCampos()
         {
             _config.Establecer(SincronizacionService.ClaveComputadora, _txtComputadora.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveLaboratorio, _txtLaboratorio.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveHoja, _txtHoja.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveCredenciales, _txtCredenciales.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveIntervalo, ((int)(_numIntervalo.Value ?? 5)).ToString());
-            Close();
         }
     }
 }

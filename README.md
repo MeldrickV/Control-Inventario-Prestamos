@@ -166,9 +166,15 @@ Flujos:
 - **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` con el botón "Publicar catálogo" de Exportar datos. Es la única vía de subida del catálogo.
 - **Bajada con confirmación**: la app revisa la hoja al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias en el catálogo se muestra un diálogo con lo que se propone (altas, cambios, bajas) y solo se aplica lo confirmado. Las bajas de registros con historial se bloquean, como en el borrado local.
 
-Configuración (menú `Administración → Configuración de sincronización…`, solo admin): identificador de la computadora, nombre del laboratorio, ID de la hoja (`spreadsheetId`), ruta del archivo de credenciales JSON e intervalo de revisión. Sin ID de hoja la sincronización queda desactivada.
+Vinculación con Google (OAuth, pensada para que el usuario no configure casi nada):
 
-> Nota: la autenticación con Google (Service Account u OAuth) aún está por decidirse; la lógica ya está preparada contra una interfaz (`ISheetsClient`) y se prueba en CI con un doble en memoria. El archivo `credentials.json` nunca debe subirse al repositorio.
+1. **Una sola vez (responsable del despliegue)**: en Google Cloud crear un proyecto, habilitar **Google Sheets API** y crear un **OAuth Client ID tipo "App de escritorio"**; pegar el Client ID y Secret en `Services/GoogleOAuthClient.cs` (`ClientId` / `ClientSecret`). Los usuarios finales nunca tocan la consola de Google.
+2. **En cada computadora (administrador)**: menú `Administración → Configuración de sincronización…` → **Conectar con Google** → se abre el navegador → iniciar sesión con la cuenta de Google del laboratorio → Aceptar. Listo: si no hay hoja, **la app la crea sola** con las pestañas necesarias y guarda el ID.
+3. Cada laboratorio usa **su propia cuenta de Google** (y por tanto su propia hoja): aislamiento natural entre sitios, sin coordinación central.
+
+Configuración adicional en el mismo diálogo (solo admin): identificador de la computadora (`LAB-1`, …), nombre del laboratorio e intervalo de revisión automática (minutos, por defecto 5). Sin cuenta conectada la sincronización queda desactivada sin molestar.
+
+> Nota técnica: el token de refresco se guarda en la tabla `configuracion` de la base local (cifrada con SQLCipher). La lógica habla con Sheets mediante `ISheetsClient` y se prueba en CI con dobles en memoria, sin red.
 
 ## Tecnologías utilizadas
 

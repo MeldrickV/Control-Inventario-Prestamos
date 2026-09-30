@@ -18,8 +18,10 @@ namespace LabInventario.Views
     public class ExportarView : UserControl
     {
         private readonly ExportService _servicio = new();
-        private readonly SincronizacionService _sync = new();
         private readonly TextBlock _lblSyncEstado = new() { TextWrapping = TextWrapping.Wrap };
+
+        private static SincronizacionService NuevaSync() =>
+            new(sheets: GoogleOAuthClient.CrearSiConectado());
         private readonly PrestamosView? _historialView;
         private readonly CheckBox _chkUsarFiltro = new() { Content = "Usar filtro de la pestaña Historial" };
         private readonly CheckBox _chkSoloActivos = new() { Content = "Solo activos" };
@@ -214,15 +216,15 @@ namespace LabInventario.Views
 
         private void ActualizarEstadoSync()
         {
-            if (!_sync.Configurada)
+            var sync = NuevaSync();
+            if (!sync.Configurada)
             {
-                _lblSyncEstado.Text = "Estado: sin configurar (falta el ID de la hoja de Google).";
+                _lblSyncEstado.Text = "Estado: sin conectar. Usa Configurar → Conectar con Google.";
                 return;
             }
-            var ultima = _sync.UltimaSincronizacion;
-            _lblSyncEstado.Text = "Estado: configurada." +
-                (string.IsNullOrWhiteSpace(ultima) ? "" : $" Última sincronización: {ultima}.") +
-                (_sync.ClienteDisponible ? "" : " Cliente de Google aún no conectado (pendiente la autenticación).");
+            var ultima = sync.UltimaSincronizacion;
+            _lblSyncEstado.Text = "Estado: cuenta de Google conectada." +
+                (string.IsNullOrWhiteSpace(ultima) ? "" : $" Última sincronización: {ultima}.");
         }
 
         private async Task SincronizarAhoraAsync()
@@ -230,23 +232,18 @@ namespace LabInventario.Views
             var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
-            if (!_sync.Configurada)
+            var sync = NuevaSync();
+            if (!sync.Configurada || !sync.ClienteDisponible)
             {
                 await Dialogos.MostrarAdvertencia(propietaria,
-                    "Primero configura la sincronización (ID de la hoja) con el botón Configurar.", "Sin configurar");
-                return;
-            }
-            if (!_sync.ClienteDisponible)
-            {
-                await Dialogos.MostrarAdvertencia(propietaria,
-                    "El cliente de Google Sheets aún no está conectado (pendiente definir la autenticación).", "Sin conexión");
+                    "Primero conecta la cuenta con Configurar → Conectar con Google.", "Sin conexión");
                 return;
             }
 
-            var subida = await _sync.SubirHistorialAsync();
+            var subida = await sync.SubirHistorialAsync();
             Log(subida.Mensaje);
 
-            var cambios = await _sync.ObtenerCambiosPendientesAsync();
+            var cambios = await sync.ObtenerCambiosPendientesAsync();
             if (cambios.Count == 0)
             {
                 await Dialogos.MostrarInfo(propietaria, subida.Mensaje + "\nNo hay cambios pendientes en la hoja.", "Sincronización");
@@ -261,7 +258,7 @@ namespace LabInventario.Views
                 return;
             }
 
-            var resultado = await _sync.AplicarCambiosAsync(cambios);
+            var resultado = await sync.AplicarCambiosAsync(cambios);
             Log($"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}.");
             foreach (var bloqueado in resultado.Bloqueados)
                 Log("Bloqueado: " + bloqueado);
@@ -276,16 +273,11 @@ namespace LabInventario.Views
             var propietaria = Ventanas.Propietaria();
             if (propietaria is null) return;
 
-            if (!_sync.Configurada)
+            var sync = NuevaSync();
+            if (!sync.Configurada || !sync.ClienteDisponible)
             {
                 await Dialogos.MostrarAdvertencia(propietaria,
-                    "Primero configura la sincronización (ID de la hoja) con el botón Configurar.", "Sin configurar");
-                return;
-            }
-            if (!_sync.ClienteDisponible)
-            {
-                await Dialogos.MostrarAdvertencia(propietaria,
-                    "El cliente de Google Sheets aún no está conectado (pendiente definir la autenticación).", "Sin conexión");
+                    "Primero conecta la cuenta con Configurar → Conectar con Google.", "Sin conexión");
                 return;
             }
 
@@ -294,7 +286,7 @@ namespace LabInventario.Views
                 "Publicar catálogo");
             if (!confirmar) return;
 
-            var filas = await _sync.PublicarCatalogoAsync();
+            var filas = await sync.PublicarCatalogoAsync();
             Log($"Catálogo publicado en la hoja: {filas} fila(s).");
             await Dialogos.MostrarInfo(propietaria, "Catálogo publicado.", "Sincronización");
             ActualizarEstadoSync();

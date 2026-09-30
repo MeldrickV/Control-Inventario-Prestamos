@@ -27,7 +27,7 @@ namespace LabInventario.Tests
             var rango = await _cliente.ObtenerValoresAsync("hoja1", "Alumnos!A:B");
 
             Assert.Equal(HttpMethod.Get, _manejador.Peticiones[0].Method);
-            Assert.Contains("/values/Alumnos!A%3AB", _manejador.Peticiones[0].RequestUri!.ToString());
+            Assert.Contains("/values/" + Uri.EscapeDataString("Alumnos!A:B"), _manejador.Peticiones[0].RequestUri!.ToString());
             Assert.Equal("Bearer", _manejador.Peticiones[0].Headers.Authorization!.Scheme);
             Assert.Equal(2, rango.Valores.Count);
             Assert.Equal("1845868-8", rango.Valores[1][1]);
@@ -82,29 +82,37 @@ namespace LabInventario.Tests
         [Fact]
         public async Task CrearHojaCalculo_DevuelveId()
         {
-            Configurar(_ => Json(new { spreadsheetId = "nueva-hoja-123" }));
+            string? cuerpo = null;
+            Configurar(req =>
+            {
+                cuerpo = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(new { spreadsheetId = "nueva-hoja-123" });
+            });
 
             var id = await _cliente.CrearHojaCalculoAsync("LabInventario - LAB-1");
 
             Assert.Equal("nueva-hoja-123", id);
-            var cuerpo = await _manejador.Peticiones[0].Content!.ReadAsStringAsync();
-            Assert.Contains("LabInventario - LAB-1", cuerpo);
+            Assert.Contains("LabInventario - LAB-1", cuerpo!);
         }
 
         [Fact]
         public async Task AsegurarPestanas_SoloCreaLasFaltantes()
         {
-            Configurar(req => req.Method == HttpMethod.Get
-                ? Json(new { sheets = new[] { new { properties = new { title = "Alumnos" } } } })
-                : Json(new { }));
+            string? cuerpoBatch = null;
+            Configurar(req =>
+            {
+                if (req.Method == HttpMethod.Get)
+                    return Json(new { sheets = new[] { new { properties = new { title = "Alumnos" } } } });
+                cuerpoBatch = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(new { });
+            });
 
             await _cliente.AsegurarPestanasAsync("hoja1", new[] { "Historial", "Alumnos", "Inventario" });
 
-            var batch = Assert.Single(_manejador.Peticiones, p => p.Method == HttpMethod.Post);
-            var cuerpo = await batch.Content!.ReadAsStringAsync();
-            Assert.Contains("Historial", cuerpo);
-            Assert.Contains("Inventario", cuerpo);
-            Assert.DoesNotContain("\"title\":\"Alumnos\"", cuerpo);
+            Assert.Single(_manejador.Peticiones, p => p.Method == HttpMethod.Post);
+            Assert.Contains("Historial", cuerpoBatch!);
+            Assert.Contains("Inventario", cuerpoBatch!);
+            Assert.DoesNotContain("\"title\":\"Alumnos\"", cuerpoBatch!);
         }
 
         [Fact]

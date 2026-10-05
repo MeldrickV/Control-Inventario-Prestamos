@@ -9,10 +9,9 @@ using SukiUI.Controls;
 namespace LabInventario.Dialogs
 {
     /// <summary>
-    /// Configuración de la sincronización con la hoja de Google del
-    /// laboratorio (solo administrador): identificador de la computadora,
-    /// hoja destino, credenciales OAuth de la institución (Client ID y
-    /// Secret, creados una vez por institución en Google Cloud) e
+    /// Configuración de la sincronización con la nube del laboratorio
+    /// (solo administrador): identificador de la computadora, URL del Apps
+    /// Script desplegado en la cuenta del laboratorio, clave compartida e
     /// intervalo de revisión automática. Todo se guarda en la tabla
     /// `configuracion` de la base local: un solo ejecutable sirve para
     /// todos los laboratorios y facultades, sin recompilar nada.
@@ -20,12 +19,10 @@ namespace LabInventario.Dialogs
     public class ConfiguracionSincronizacionDialog : SukiWindow
     {
         private readonly ConfiguracionRepository _config = new();
-        private readonly GoogleOAuthClient _oauth = new();
         private readonly TextBox _txtComputadora = new() { Width = 320 };
         private readonly TextBox _txtLaboratorio = new() { Width = 320 };
-        private readonly TextBox _txtHoja = new() { Width = 320 };
-        private readonly TextBox _txtClientId = new() { Width = 320 };
-        private readonly TextBox _txtClientSecret = new() { Width = 320, PasswordChar = '•' };
+        private readonly TextBox _txtUrl = new() { Width = 320 };
+        private readonly TextBox _txtClave = new() { Width = 320, PasswordChar = '•' };
         private readonly NumericUpDown _numIntervalo = new() { Width = 320, Minimum = 1, Maximum = 120, FormatString = "0" };
         private readonly TextBlock _lblEstado = new() { TextWrapping = TextWrapping.Wrap, Width = 340 };
 
@@ -40,9 +37,8 @@ namespace LabInventario.Dialogs
 
             _txtComputadora.Text = _config.Obtener(SincronizacionService.ClaveComputadora) ?? "";
             _txtLaboratorio.Text = _config.Obtener(SincronizacionService.ClaveLaboratorio) ?? "";
-            _txtHoja.Text = _config.Obtener(SincronizacionService.ClaveArchivo) ?? "";
-            _txtClientId.Text = _config.Obtener(GoogleOAuthClient.ClaveClientId) ?? "";
-            _txtClientSecret.Text = _config.Obtener(GoogleOAuthClient.ClaveClientSecret) ?? "";
+            _txtUrl.Text = _config.Obtener(AppsScriptClient.ClaveScriptUrl) ?? "";
+            _txtClave.Text = _config.Obtener(AppsScriptClient.ClaveSecreta) ?? "";
             _numIntervalo.Value = new SincronizacionService().IntervaloMinutos();
 
             var btnGuardar = new Button { Content = "Guardar", Classes = { "Flat" }, MinWidth = 100, IsDefault = true };
@@ -58,8 +54,8 @@ namespace LabInventario.Dialogs
             var panel = new StackPanel { Spacing = 8, Width = 340 };
             panel.Children.Add(new TextBlock
             {
-                Text = "Identifica esta computadora y sus archivos en el Drive del laboratorio. " +
-                       "Sin cuenta conectada la sincronización queda desactivada.",
+                Text = "Conecta esta computadora con el Apps Script desplegado en la cuenta " +
+                       "del laboratorio. Sin URL y clave, la sincronización queda desactivada.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 340,
@@ -68,39 +64,33 @@ namespace LabInventario.Dialogs
             panel.Children.Add(_txtComputadora);
             panel.Children.Add(new TextBlock { Text = "Nombre del laboratorio:", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
             panel.Children.Add(_txtLaboratorio);
-            panel.Children.Add(new TextBlock { Text = "ID del archivo en Drive (se llena solo al conectar):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
-            panel.Children.Add(_txtHoja);
-            panel.Children.Add(new TextBlock { Text = "Client ID de Google (OAuth, una vez por institución):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
-            panel.Children.Add(_txtClientId);
-            panel.Children.Add(new TextBlock { Text = "Client Secret de Google (OAuth):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
-            panel.Children.Add(_txtClientSecret);
+            panel.Children.Add(new TextBlock { Text = "URL del script (termina en /exec):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
+            panel.Children.Add(_txtUrl);
+            panel.Children.Add(new TextBlock { Text = "Clave del script:", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
+            panel.Children.Add(_txtClave);
             panel.Children.Add(new TextBlock
             {
-                Text = "El Client ID y Secret se crean una sola vez por institución en Google Cloud " +
-                       "(OAuth Client ID tipo «App de escritorio» con acceso a Google Sheets API) y se pegan aquí.",
+                Text = "La URL y la clave salen del despliegue del script (una vez por laboratorio, " +
+                       "ver el instructivo). Cada laboratorio usa los suyos.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 340,
             });
-            panel.Children.Add(new TextBlock { Text = "Revisar la hoja cada (minutos):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
+            panel.Children.Add(new TextBlock { Text = "Revisar la nube cada (minutos):", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
             panel.Children.Add(_numIntervalo);
 
-            var btnConectar = new Button { Content = "Conectar con Google…", Classes = { "Flat" }, MinWidth = 170 };
-            btnConectar.Click += (_, _) => Errores.Ejecutar(this, ConectarAsync);
-
-            var btnDesconectar = new Button { Content = "Desconectar", Classes = { "Outlined" }, MinWidth = 110 };
-            btnDesconectar.Click += (_, _) => Errores.Ejecutar(this, DesconectarAsync);
+            var btnProbar = new Button { Content = "Probar conexión…", Classes = { "Flat" }, MinWidth = 170 };
+            btnProbar.Click += (_, _) => Errores.Ejecutar(this, ProbarConexionAsync);
 
             var panelConexion = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Avalonia.Thickness(0, 10, 0, 0) };
-            panelConexion.Children.Add(btnConectar);
-            panelConexion.Children.Add(btnDesconectar);
-            panel.Children.Add(new TextBlock { Text = "Cuenta de Google:", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
+            panelConexion.Children.Add(btnProbar);
+            panel.Children.Add(new TextBlock { Text = "Estado:", Margin = new Avalonia.Thickness(0, 6, 0, 0) });
             panel.Children.Add(_lblEstado);
             panel.Children.Add(panelConexion);
             panel.Children.Add(new TextBlock
             {
-                Text = "Al conectar se abre el navegador para iniciar sesión; si esta computadora " +
-                       "aún no tiene archivos, se crean solos en su Drive con las pestañas necesarias.",
+                Text = "Al probar se verifican la URL y la clave y se dejan listas las pestañas " +
+                       "de la nube si faltan.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 340,
@@ -120,51 +110,32 @@ namespace LabInventario.Dialogs
 
         private void ActualizarEstado()
         {
-            _lblEstado.Text = _oauth.EstaConectado
-                ? "Estado: cuenta de Google conectada."
-                : "Estado: sin conectar.";
+            var url = _config.Obtener(AppsScriptClient.ClaveScriptUrl) ?? "";
+            var clave = _config.Obtener(AppsScriptClient.ClaveSecreta) ?? "";
+            _lblEstado.Text = url.Length > 0 && clave.Length > 0
+                ? "Estado: URL y clave guardadas."
+                : "Estado: sin configurar.";
         }
 
-        private async Task ConectarAsync()
+        private async Task ProbarConexionAsync()
         {
-            // Lo capturado en los campos debe quedar en base ANTES de
-            // conectar: el cliente OAuth lee de ahí, no de los TextBox.
+            // Lo capturado debe quedar en base ANTES de probar: el cliente
+            // lee de ahí, no de los TextBox.
             GuardarCampos();
-            bool conectado;
-            try
+            var cliente = AppsScriptClient.CrearSiConectado();
+            if (cliente is null)
             {
-                conectado = await _oauth.ConectarAsync(PedirCodigoManualAsync);
-            }
-            catch (InvalidOperationException ex)
-            {
-                await Dialogos.MostrarAdvertencia(this, ex.Message, "No se pudo conectar");
+                await Dialogos.MostrarAdvertencia(this,
+                    "Falta la URL del script o la clave. Pégalas y pulsa Probar conexión.",
+                    "Sin configurar");
                 return;
             }
-            if (!conectado) return;
 
-            var compu = _txtComputadora.Text?.Trim() ?? "";
-            var etiqueta = compu.Length > 0 ? compu : "Laboratorio";
-            var servicio = new SincronizacionService(sheets: _oauth);
-            var id = await servicio.AsegurarArchivosAsync("LabInventario - " + etiqueta, "Cambios - " + etiqueta);
-            _txtHoja.Text = id;
-            GuardarCampos();
+            var servicio = new SincronizacionService(sheets: cliente);
+            await servicio.AsegurarHojaAsync();
             ActualizarEstado();
-            await Dialogos.MostrarInfo(this, "Cuenta conectada y archivos listos en Drive para sincronizar.", "Listo");
-            Close();
-        }
-
-        private async Task DesconectarAsync()
-        {
-            await _oauth.DesconectarAsync();
-            ActualizarEstado();
-            await Dialogos.MostrarInfo(this, "Cuenta de Google desconectada en esta computadora.", "Listo");
-        }
-
-        private async Task<string?> PedirCodigoManualAsync(string url)
-        {
-            var dialogo = new CodigoAuthDialog(url);
-            await dialogo.ShowDialog(this);
-            return dialogo.Codigo;
+            await Dialogos.MostrarInfo(this,
+                "Conexión correcta: el script respondió y las pestañas están listas.", "Listo");
         }
 
         private void Guardar()
@@ -177,9 +148,8 @@ namespace LabInventario.Dialogs
         {
             _config.Establecer(SincronizacionService.ClaveComputadora, _txtComputadora.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveLaboratorio, _txtLaboratorio.Text?.Trim() ?? "");
-            _config.Establecer(SincronizacionService.ClaveArchivo, _txtHoja.Text?.Trim() ?? "");
-            _config.Establecer(GoogleOAuthClient.ClaveClientId, _txtClientId.Text?.Trim() ?? "");
-            _config.Establecer(GoogleOAuthClient.ClaveClientSecret, _txtClientSecret.Text?.Trim() ?? "");
+            _config.Establecer(AppsScriptClient.ClaveScriptUrl, _txtUrl.Text?.Trim() ?? "");
+            _config.Establecer(AppsScriptClient.ClaveSecreta, _txtClave.Text?.Trim() ?? "");
             _config.Establecer(SincronizacionService.ClaveIntervalo, ((int)(_numIntervalo.Value ?? 5)).ToString());
         }
     }

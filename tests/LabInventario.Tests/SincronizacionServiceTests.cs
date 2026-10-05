@@ -5,8 +5,9 @@ namespace LabInventario.Tests
 {
     public class SincronizacionServiceTests : BaseDePruebas
     {
-        private const string Hoja = "hoja-test";
-        private const string HojaCambios = "cambios-test";
+        // El servicio usa las tiendas lógicas "principal"/"cambios" del script.
+        private const string Hoja = "principal";
+        private const string HojaCambios = "cambios";
 
         private readonly FakeSheetsClient _fake = new();
         private ConfiguracionRepository _config = null!;
@@ -15,8 +16,8 @@ namespace LabInventario.Tests
         private void ConfigurarSync()
         {
             _config = new ConfiguracionRepository(Db);
-            _config.Establecer(SincronizacionService.ClaveArchivo, Hoja);
-            _config.Establecer(SincronizacionService.ClaveCambios, HojaCambios);
+            _config.Establecer(AppsScriptClient.ClaveScriptUrl, "https://script.google.com/macros/s/test/exec");
+            _config.Establecer(AppsScriptClient.ClaveSecreta, "clave-test");
             _config.Establecer(SincronizacionService.ClaveComputadora, "LAB-TEST");
             _sync = new SincronizacionService(Db, _config, _fake);
         }
@@ -177,40 +178,35 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task AsegurarArchivos_SinIds_CreaAmbosYEscribeEncabezados()
+        public async Task AsegurarHoja_EscribeEncabezadosDondeFaltan()
         {
             ConfigurarSync();
-            _config.Establecer(SincronizacionService.ClaveArchivo, "");
-            _config.Establecer(SincronizacionService.ClaveCambios, "");
 
-            var id = await _sync.AsegurarArchivosAsync("LabInventario - LAB-TEST", "Cambios - LAB-TEST");
+            await _sync.AsegurarHojaAsync();
 
-            Assert.Equal("hoja-fake-1", id);
-            Assert.Equal("hoja-fake-1", _config.Obtener(SincronizacionService.ClaveArchivo));
-            Assert.Equal("hoja-fake-2", _config.Obtener(SincronizacionService.ClaveCambios));
-            Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("hoja-fake-1", "Alumnos")[0].ToArray());
-            Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer("hoja-fake-1", "Inventario")[0].ToArray());
-            Assert.Equal(11, _fake.Leer("hoja-fake-1", "Historial")[0].Count);
-            Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("hoja-fake-2", "Alumnos")[0].ToArray());
+            // El doble en memoria usa "principal"/"cambios" como tiendas.
+            Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("principal", "Alumnos")[0].ToArray());
+            Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer("principal", "Inventario")[0].ToArray());
+            Assert.Equal(11, _fake.Leer("principal", "Historial")[0].Count);
+            Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("cambios", "Alumnos")[0].ToArray());
         }
 
         [Fact]
-        public async Task AsegurarArchivos_Existentes_ConservaDatosYSoloAgregaPestanas()
+        public async Task AsegurarHoja_Existente_ConservaDatosYSoloAgregaPestanas()
         {
             ConfigurarSync();
-            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
+            _fake.Sembrar("principal", "Alumnos", new List<List<string>>
             {
                 new() { "Nombre", "NumeroCuenta" },
                 new() { NombreAlumno, CuentaAlumno },
             });
 
-            var id = await _sync.AsegurarArchivosAsync("LabInventario - LAB-TEST", "Cambios - LAB-TEST");
+            await _sync.AsegurarHojaAsync();
 
-            Assert.Equal(Hoja, id);
-            var alumnos = _fake.Leer(Hoja, "Alumnos");
+            var alumnos = _fake.Leer("principal", "Alumnos");
             Assert.Equal(2, alumnos.Count); // no duplicó el encabezado ni borró filas
             Assert.Equal(CuentaAlumno, alumnos[1][1]);
-            Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer(Hoja, "Inventario")[0].ToArray());
+            Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer("principal", "Inventario")[0].ToArray());
         }
 
         [Fact]

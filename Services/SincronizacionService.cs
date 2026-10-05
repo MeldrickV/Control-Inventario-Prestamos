@@ -22,23 +22,20 @@ namespace LabInventario.Services
     }
 
     /// <summary>
-    /// Orquesta la sincronización con el Drive del laboratorio: sube el
-    /// historial nuevo al archivo principal (automático), publica el
-    /// catálogo completo (manual), detecta diferencias en el archivo de
+    /// Orquesta la sincronización con la nube del laboratorio (Apps Script
+    /// + Sheets): sube el historial nuevo (automático), publica el
+    /// catálogo completo (manual), detecta diferencias en la pestaña de
     /// Cambios que edita el revisor (para confirmar en diálogo), las aplica
-    /// de forma idempotente y deja el archivo de Cambios listo de nuevo.
+    /// de forma idempotente y deja Cambios listo de nuevo.
     ///
-    /// La base local sigue siendo la fuente de verdad; Drive es el
+    /// La base local sigue siendo la fuente de verdad; la nube es el
     /// buzón/respaldo. El cliente de red (<see cref="ISheetsClient"/>) se
-    /// inyecta: en producción es el cliente de Drive con OAuth y en
-    /// pruebas un doble en memoria. Sin cliente o sin configurar, los
-    /// métodos remotos se omiten en silencio para no interrumpir la
-    /// operación local.
+    /// inyecta: en producción es el cliente del script y en pruebas un
+    /// doble en memoria. Sin cliente o sin configurar, los métodos remotos
+    /// se omiten en silencio para no interrumpir la operación local.
     /// </summary>
     public class SincronizacionService
     {
-        public const string ClaveArchivo = "Sync.DriveArchivoId";
-        public const string ClaveCambios = "Sync.DriveCambiosId";
         public const string ClaveComputadora = "Sync.ComputadoraId";
         public const string ClaveLaboratorio = "Sync.LaboratorioNombre";
         public const string ClaveIntervalo = "Sync.IntervaloMinutos";
@@ -76,14 +73,14 @@ namespace LabInventario.Services
             _prestamos = new PrestamoRepository(_db);
         }
 
-        /// <summary>ID del archivo .xlsx principal en Drive (Historial/Alumnos/Inventario).</summary>
-        public string ArchivoId => _config.Obtener(ClaveArchivo) ?? "";
+        // Tiendas lógicas del script (un solo spreadsheet por laboratorio).
+        private const string TiendaPrincipal = AppsScriptClient.TiendaPrincipal;
+        private const string TiendaCambios = AppsScriptClient.TiendaCambios;
 
-        /// <summary>ID del archivo .xlsx de Cambios en Drive (lo que el revisor edita en su lugar).</summary>
-        public string CambiosId => _config.Obtener(ClaveCambios) ?? "";
-
-        /// <summary>Hay archivo configurado para sincronizar.</summary>
-        public bool Configurada => !string.IsNullOrWhiteSpace(ArchivoId);
+        /// <summary>Hay URL y clave del script configuradas.</summary>
+        public bool Configurada =>
+            !string.IsNullOrWhiteSpace(_config.Obtener(AppsScriptClient.ClaveScriptUrl)) &&
+            !string.IsNullOrWhiteSpace(_config.Obtener(AppsScriptClient.ClaveSecreta));
 
         /// <summary>Hay cliente de red conectado (la autenticación de Google ya está enchufada).</summary>
         public bool ClienteDisponible => _sheets is not null;
@@ -106,43 +103,27 @@ namespace LabInventario.Services
         };
 
         /// <summary>
-        /// Deja los archivos listos en Drive: si no hay IDs configurados
-        /// crea el archivo principal y el de Cambios con los títulos
-        /// sugeridos, asegura sus pestañas y escribe el encabezado donde
-        /// falte. Devuelve el ID del archivo principal.
+        /// Deja la nube lista: asegura las pestañas del spreadsheet del
+        /// laboratorio y escribe el encabezado donde falte.
         /// </summary>
-        public async Task<string> AsegurarArchivosAsync(string tituloBase, string tituloCambios, CancellationToken ct = default)
+        public async Task AsegurarHojaAsync(CancellationToken ct = default)
         {
             if (_sheets is null)
-                throw new InvalidOperationException("Cliente de Google aún no conectado.");
+                throw new InvalidOperationException("Sin conexión con el script (falta URL o clave).");
 
-            var archivo = ArchivoId;
-            if (string.IsNullOrWhiteSpace(archivo))
-            {
-                archivo = await _sheets.CrearHojaCalculoAsync(tituloBase, ct);
-                _config.Establecer(ClaveArchivo, archivo);
-            }
-
-            var cambios = CambiosId;
-            if (string.IsNullOrWhiteSpace(cambios))
-            {
-                cambios = await _sheets.CrearHojaCalculoAsync(tituloCambios, ct);
-                _config.Establecer(ClaveCambios, cambios);
-            }
-
-            await AsegurarPestanasConEncabezadoAsync(archivo, new[] { TabHistorial, TabAlumnos, TabInventario }, ct);
-            await AsegurarPestanasConEncabezadoAsync(cambios, new[] { TabAlumnos, TabInventario }, ct);
-            return archivo;
+            await AsegurarPestanasConEncabezadoAsync(TiendaPrincipal, new[] { TabHistorial, TabAlumnos, TabInventario }, ct);
+            await AsegurarPestanasConEncabezadoAsync(TiendaCambios, new[] { TabAlumnos, TabInventario }, ct);
+            _config.Establecer(ClaveUltimaSync, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
         }
 
-        private async Task AsegurarPestanasConEncabezadoAsync(string archivoId, string[] pestanas, CancellationToken ct)
+        private async Task AsegurarPestanasConEncabezadoAsync(string tienda, string[] pestanas, CancellationToken ct)
         {
-            await _sheets!.AsegurarPestanasAsync(archivoId, pestanas, ct);
+            await _sheets!.AsegurarPestanasAsync(tienda, pestanas, ct);
             foreach (var pestana in pestanas)
             {
-                var actual = await _sheets.ObtenerValoresAsync(archivoId, $"{pestana}!A1:Z1", ct);
+                var actual = await _sheets.ObtenerValoresAsync(tienda, $"{pestana}!A1:Z1", ct);
                 if (actual.Valores.Count == 0)
-                    await _sheets.ActualizarValoresAsync(archivoId, $"{pestana}!A1",
+                    await _sheets.ActualizarValoresAsync(tienda, $"{pestana}!A1",
                         new List<List<string>> { EncabezadoPara(pestana).ToList() }, ct);
             }
         }
@@ -189,7 +170,7 @@ namespace LabInventario.Services
                 p.Estado, Guid.NewGuid().ToString("N"),
             }).ToList();
 
-            var confirmadas = await _sheets.AgregarFilasAsync(ArchivoId, $"{TabHistorial}!A:K", filas, ct);
+            var confirmadas = await _sheets.AgregarFilasAsync(TiendaPrincipal, $"{TabHistorial}!A:K", filas, ct);
             if (confirmadas < filas.Count)
                 throw new InvalidOperationException(
                     $"Drive confirmó {confirmadas} de {filas.Count} filas; se reintentará en la próxima sincronización (marcador sin avanzar).");
@@ -221,10 +202,10 @@ namespace LabInventario.Services
             var filasInventario = new List<List<string>> { EncabezadoInventario.ToList() };
             filasInventario.AddRange(_materiales.Listar().Select(m => new List<string> { m.Nombre, m.CodigoBarras, m.CantidadTotal.ToString() }));
 
-            await _sheets.LimpiarRangoAsync(ArchivoId, $"{TabAlumnos}!A:B", ct);
-            await _sheets.ActualizarValoresAsync(ArchivoId, $"{TabAlumnos}!A1", filasAlumnos, ct);
-            await _sheets.LimpiarRangoAsync(ArchivoId, $"{TabInventario}!A:C", ct);
-            await _sheets.ActualizarValoresAsync(ArchivoId, $"{TabInventario}!A1", filasInventario, ct);
+            await _sheets.LimpiarRangoAsync(TiendaPrincipal, $"{TabAlumnos}!A:B", ct);
+            await _sheets.ActualizarValoresAsync(TiendaPrincipal, $"{TabAlumnos}!A1", filasAlumnos, ct);
+            await _sheets.LimpiarRangoAsync(TiendaPrincipal, $"{TabInventario}!A:C", ct);
+            await _sheets.ActualizarValoresAsync(TiendaPrincipal, $"{TabInventario}!A1", filasInventario, ct);
             _config.Establecer(ClaveUltimaSync, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             return filasAlumnos.Count + filasInventario.Count - 2;
         }
@@ -248,10 +229,10 @@ namespace LabInventario.Services
             var cambios = new List<CambioSincronizacion>();
             _vistosAlumnos = null;
             _vistosInventario = null;
-            if (!Configurada || _sheets is null || string.IsNullOrWhiteSpace(CambiosId)) return cambios;
+            if (!Configurada || _sheets is null) return cambios;
 
-            var alumnosHoja = await _sheets.ObtenerValoresAsync(CambiosId, $"{TabAlumnos}!A:B", ct);
-            var inventarioHoja = await _sheets.ObtenerValoresAsync(CambiosId, $"{TabInventario}!A:C", ct);
+            var alumnosHoja = await _sheets.ObtenerValoresAsync(TiendaCambios, $"{TabAlumnos}!A:B", ct);
+            var inventarioHoja = await _sheets.ObtenerValoresAsync(TiendaCambios, $"{TabInventario}!A:C", ct);
 
             var filasAlumnos = FilasDeDatos(alumnosHoja, EncabezadoAlumnos);
             var filasInventario = FilasDeDatos(inventarioHoja, EncabezadoInventario);
@@ -276,7 +257,7 @@ namespace LabInventario.Services
         /// </summary>
         public async Task ConfirmarCambiosConsumidosAsync(CancellationToken ct = default)
         {
-            if (!Configurada || _sheets is null || string.IsNullOrWhiteSpace(CambiosId)) return;
+            if (!Configurada || _sheets is null) return;
             await LimpiarSiSigueIgualAsync(TabAlumnos, EncabezadoAlumnos, _vistosAlumnos, ct);
             await LimpiarSiSigueIgualAsync(TabInventario, EncabezadoInventario, _vistosInventario, ct);
             _vistosAlumnos = null;
@@ -286,10 +267,10 @@ namespace LabInventario.Services
         private async Task LimpiarSiSigueIgualAsync(string pestana, string[] encabezado, List<List<string>>? vistos, CancellationToken ct)
         {
             if (vistos is null) return;
-            var actual = await _sheets!.ObtenerValoresAsync(CambiosId, $"{pestana}!A:Z", ct);
+            var actual = await _sheets!.ObtenerValoresAsync(TiendaCambios, $"{pestana}!A:Z", ct);
             var filas = FilasDeDatos(actual, encabezado) ?? new List<List<string>>();
             if (!MismasFilas(filas, vistos)) return;
-            await _sheets.ActualizarValoresAsync(CambiosId, $"{pestana}!A1",
+            await _sheets.ActualizarValoresAsync(TiendaCambios, $"{pestana}!A1",
                 new List<List<string>> { encabezado.ToList() }, ct);
         }
 

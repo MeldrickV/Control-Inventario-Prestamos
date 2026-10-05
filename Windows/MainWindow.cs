@@ -60,7 +60,7 @@ namespace LabInventario.Windows
         /// recién hecha sin reiniciar la app).
         /// </summary>
         private static SincronizacionService NuevaSync() =>
-            new(sheets: GoogleOAuthClient.CrearSiConectado());
+            new(sheets: AppsScriptClient.CrearSiConectado());
 
         public MainWindow()
         {

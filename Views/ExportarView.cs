@@ -21,7 +21,7 @@ namespace LabInventario.Views
         private readonly TextBlock _lblSyncEstado = new() { TextWrapping = TextWrapping.Wrap };
 
         private static SincronizacionService NuevaSync() =>
-            new(sheets: GoogleOAuthClient.CrearSiConectado());
+            new(sheets: AppsScriptClient.CrearSiConectado());
         private readonly PrestamosView? _historialView;
         private readonly CheckBox _chkUsarFiltro = new() { Content = "Usar filtro de la pestaña Historial" };
         private readonly CheckBox _chkSoloActivos = new() { Content = "Solo activos" };
@@ -129,7 +129,7 @@ namespace LabInventario.Views
             raiz.Children.Add(panelCajas);
             raiz.Children.Add(new Border { Height = 10 });
 
-            var cajaSync = Cajas.GroupBox("Sincronización con Google Drive", ConstruirPanelSync());
+            var cajaSync = Cajas.GroupBox("Sincronización en la nube", ConstruirPanelSync());
             DockPanel.SetDock(cajaSync, Dock.Top);
             raiz.Children.Add(cajaSync);
             raiz.Children.Add(new Border { Height = 10 });
@@ -219,11 +219,11 @@ namespace LabInventario.Views
             var sync = NuevaSync();
             if (!sync.Configurada)
             {
-                _lblSyncEstado.Text = "Estado: sin conectar. Usa Configurar → pega el Client ID/Secret → Conectar con Google.";
+                _lblSyncEstado.Text = "Estado: sin configurar. Usa Configurar → pega la URL y la clave del script.";
                 return;
             }
             var ultima = sync.UltimaSincronizacion;
-            _lblSyncEstado.Text = "Estado: cuenta de Google conectada." +
+            _lblSyncEstado.Text = "Estado: sincronización configurada." +
                 (string.IsNullOrWhiteSpace(ultima) ? "" : $" Última sincronización: {ultima}.");
         }
 
@@ -236,7 +236,7 @@ namespace LabInventario.Views
             if (!sync.Configurada || !sync.ClienteDisponible)
             {
                 await Dialogos.MostrarAdvertencia(propietaria,
-                    "Primero conecta la cuenta con Configurar → Conectar con Google.", "Sin conexión");
+                    "Primero configura la URL y la clave con el botón Configurar.", "Sin conexión");
                 return;
             }
 
@@ -278,17 +278,17 @@ namespace LabInventario.Views
             if (!sync.Configurada || !sync.ClienteDisponible)
             {
                 await Dialogos.MostrarAdvertencia(propietaria,
-                    "Primero conecta la cuenta con Configurar → Conectar con Google.", "Sin conexión");
+                    "Primero configura la URL y la clave con el botón Configurar.", "Sin conexión");
                 return;
             }
 
             var confirmar = await Dialogos.Confirmar(propietaria,
-                "Se reescribirán las pestañas Alumnos e Inventario del archivo en Drive con el catálogo local actual.\n\n¿Continuar?",
+                "Se reescribirán las pestañas Alumnos e Inventario de la nube con el catálogo local actual.\n\n¿Continuar?",
                 "Publicar catálogo");
             if (!confirmar) return;
 
             var filas = await sync.PublicarCatalogoAsync();
-            Log($"Catálogo publicado en Drive: {filas} fila(s).");
+            Log($"Catálogo publicado en la nube: {filas} fila(s).");
             await Dialogos.MostrarInfo(propietaria, "Catálogo publicado.", "Sincronización");
             ActualizarEstadoSync();
         }

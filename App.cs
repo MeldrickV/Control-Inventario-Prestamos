@@ -120,7 +120,7 @@ namespace LabInventario
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                var sync = new SincronizacionService(sheets: GoogleOAuthClient.CrearSiConectado());
+                var sync = new SincronizacionService(sheets: AppsScriptClient.CrearSiConectado());
                 await sync.SubirHistorialAsync(cts.Token);
             }
             catch (Exception ex)

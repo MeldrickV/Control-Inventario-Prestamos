@@ -43,7 +43,7 @@ namespace LabInventario.Tests
         {
             CrearAlumnoYMaterial();
 
-            var resultados = Buscar().Buscar("multim");
+            var resultados = Buscar().Buscar("mult");
 
             var material = Assert.Single(resultados);
             Assert.Equal(CodigoMaterial, material.Material!.CodigoBarras);
@@ -96,6 +96,15 @@ namespace LabInventario.Tests
             CrearAlumnoYMaterial();
 
             Assert.Empty(Buscar().Buscar("zzz-sin-existir"));
+        }
+
+        [Fact]
+        public void Buscar_SinAcentos_EncuentraConAcentos()
+        {
+            CrearAlumnoYMaterial();
+
+            Assert.Contains(Buscar().Buscar("sofia"), r => r.Alumno?.NumeroCuenta == CuentaAlumno);
+            Assert.Contains(Buscar().Buscar("MULTIMETRO"), r => r.Material?.CodigoBarras == CodigoMaterial);
         }
     }
 }

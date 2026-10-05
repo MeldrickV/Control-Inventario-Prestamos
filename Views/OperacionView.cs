@@ -97,7 +97,8 @@ namespace LabInventario.Views
             var lblAyuda = new TextBlock
             {
                 Text = "Escanea la identificacion, luego cada material\n" +
-                       "Para enviar la solicitud, presiona Enter con el cuadro vacío.",
+                       "Para enviar la solicitud, presiona Enter con el cuadro vacío.\n" +
+                       "Si el escáner falla, usa «Buscar manualmente…».",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
             };
@@ -105,11 +106,15 @@ namespace LabInventario.Views
             var btnLimpiar = new Button { Content = "Cancelar / Limpiar todo", Classes = { "Outlined" }, MinWidth = 200 };
             btnLimpiar.Click += (_, _) => Limpiar();
 
+            var btnBuscar = new Button { Content = "Buscar manualmente…", Classes = { "Outlined" }, MinWidth = 200 };
+            btnBuscar.Click += (_, _) => Errores.Ejecutar(Ventanas.Propietaria(), BuscarManualmente);
+
             var panelCaptura = new StackPanel { Spacing = 8 };
             panelCaptura.Children.Add(_lblEscaneo);
             panelCaptura.Children.Add(_txtEscaneo);
             panelCaptura.Children.Add(lblAyuda);
             panelCaptura.Children.Add(btnLimpiar);
+            panelCaptura.Children.Add(btnBuscar);
             var grupoCaptura = Cajas.GroupBox("Captura (escáner)", panelCaptura, 430);
 
             // Panel: lista acumulada
@@ -207,6 +212,27 @@ namespace LabInventario.Views
             }
 
             MostrarError($"Código no reconocido en alumnos ni materiales: '{codigo}'.");
+        }
+
+        /// <summary>
+        /// Respaldo del escáner: abre el buscador manual y procesa el
+        /// renglón elegido exactamente igual que un código escaneado (con
+        /// las mismas validaciones de alumno en curso y stock).
+        /// </summary>
+        private async Task BuscarManualmente()
+        {
+            var propietaria = Ventanas.Propietaria();
+            if (propietaria is null) return;
+
+            var dialogo = new BusquedaManualDialog();
+            await dialogo.ShowDialog(propietaria);
+
+            if (dialogo.Seleccion?.Alumno is Alumno alumno)
+                ProcesarAlumnoEscaneado(alumno);
+            else if (dialogo.Seleccion?.Material is Material material)
+                ProcesarMaterialEscaneado(material);
+
+            _txtEscaneo.Focus();
         }
 
         private void ProcesarAlumnoEscaneado(Alumno alumno)

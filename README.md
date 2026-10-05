@@ -52,7 +52,7 @@ El número de cuenta es único dentro de la base de datos.
 
 ### 🔄 Préstamos y devoluciones
 
-El módulo de operación permite trabajar con un escáner de códigos.
+El módulo de operación permite trabajar con un escáner de códigos. Si el escáner falla, el botón "Buscar manualmente…" localiza al alumno (nombre o cuenta) o al material (nombre o código) y lo procesa igual que un código escaneado.
 
 El flujo principal es:
 

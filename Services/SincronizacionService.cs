@@ -195,10 +195,10 @@ namespace LabInventario.Services
             var filasInventario = new List<List<string>> { EncabezadoInventario.ToList() };
             filasInventario.AddRange(_materiales.Listar().Select(m => new List<string> { m.Nombre, m.CodigoBarras, m.CantidadTotal.ToString() }));
 
-            await _sheets.LimpiarRangoAsync(TiendaPrincipal, $"{TabAlumnos}!A:B", ct);
-            await _sheets.ActualizarValoresAsync(TiendaPrincipal, $"{TabAlumnos}!A1", filasAlumnos, ct);
-            await _sheets.LimpiarRangoAsync(TiendaPrincipal, $"{TabInventario}!A:C", ct);
-            await _sheets.ActualizarValoresAsync(TiendaPrincipal, $"{TabInventario}!A1", filasInventario, ct);
+            await _sheets.LimpiarRangoAsync(Tienda, $"{TabAlumnos}!A:B", ct);
+            await _sheets.ActualizarValoresAsync(Tienda, $"{TabAlumnos}!A1", filasAlumnos, ct);
+            await _sheets.LimpiarRangoAsync(Tienda, $"{TabInventario}!A:C", ct);
+            await _sheets.ActualizarValoresAsync(Tienda, $"{TabInventario}!A1", filasInventario, ct);
             _config.Establecer(ClaveUltimaSync, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             return filasAlumnos.Count + filasInventario.Count - 2;
         }

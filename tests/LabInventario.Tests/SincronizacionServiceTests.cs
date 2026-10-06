@@ -132,7 +132,7 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task ObtenerCambiosPendientes_DetectaAltaCambioBaja()
+        public async Task ObtenerCambiosPendientes_DetectaAltaYCambioSinProponerBajas()
         {
             ConfigurarSync();
             CrearAlumnoYMaterial();
@@ -144,24 +144,24 @@ namespace LabInventario.Tests
                 new() { "Nombre", "NumeroCuenta" },
                 new() { "Ana Sofía Cambiada", CuentaAlumno },   // cambio de nombre
                 new() { "Alumno Nuevo", "22222222" },            // alta
-                // "11111111" ausente → baja
+                // "11111111" ausente → ya NO propone baja (lista de propuestas)
             });
             _fake.Sembrar(HojaCambios, "Inventario", new List<List<string>>
             {
                 new() { "Nombre", "CodigoBarras", "CantidadTotal" },
                 new() { NombreMaterial, CodigoMaterial, CantidadTotalMaterial.ToString() }, // igual
                 new() { "Material Nuevo", "8888888888888", "7" },                            // alta
-                // "9999999999999" ausente → baja
+                // "9999999999999" ausente → ya NO propone baja
             });
 
             var cambios = await _sync.ObtenerCambiosPendientesAsync();
 
             Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Alumno && c.Accion == AccionCambio.Alta && c.Clave == "22222222");
             Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Alumno && c.Accion == AccionCambio.Cambio && c.Clave == CuentaAlumno);
-            Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Alumno && c.Accion == AccionCambio.Baja && c.Clave == "11111111");
             Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Material && c.Accion == AccionCambio.Alta && c.Clave == "8888888888888");
-            Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Material && c.Accion == AccionCambio.Baja && c.Clave == "9999999999999");
             Assert.DoesNotContain(cambios, c => c.Entidad == EntidadCambio.Material && c.Clave == CodigoMaterial);
+            Assert.DoesNotContain(cambios, c => c.Accion == AccionCambio.Baja);
+            Assert.Equal(3, cambios.Count);
         }
 
         [Fact]

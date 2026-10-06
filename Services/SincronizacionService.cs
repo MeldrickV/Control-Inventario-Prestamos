@@ -212,11 +212,11 @@ namespace LabInventario.Services
         private List<List<string>>? _vistosInventario;
 
         /// <summary>
-        /// Lee el archivo de Cambios (lo que el revisor editó en su lugar
-        /// en Drive) y lo compara con la base local por clave de negocio,
-        /// devolviendo altas, cambios y bajas. Si una pestaña llega vacía
-        /// (archivo nuevo o lectura fallida) no se propone nada de esa
-        /// entidad, para no borrar todo por error.
+        /// Lee el archivo de Cambios (lo que el revisor editó en su lugar)
+        /// y lo compara con la base local por clave de negocio, devolviendo
+        /// altas y cambios. Nunca propone bajas: la hoja es una lista de
+        /// propuestas, no el catálogo completo. Si una pestaña llega vacía
+        /// no se propone nada de esa entidad.
         /// </summary>
         public async Task<List<CambioSincronizacion>> ObtenerCambiosPendientesAsync(CancellationToken ct = default)
         {
@@ -299,14 +299,12 @@ namespace LabInventario.Services
         {
             var cambios = new List<CambioSincronizacion>();
             var locales = _alumnos.Listar().ToDictionary(a => a.NumeroCuenta, a => a, StringComparer.Ordinal);
-            var vistos = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var f in filas)
             {
                 var nombre = f[0].Trim();
                 var cuenta = f[1].Trim();
                 if (cuenta.Length == 0) continue;
-                vistos.Add(cuenta);
                 if (!locales.TryGetValue(cuenta, out var local))
                 {
                     cambios.Add(new CambioSincronizacion
@@ -327,15 +325,10 @@ namespace LabInventario.Services
                 }
             }
 
-            foreach (var local in locales.Values.Where(a => !vistos.Contains(a.NumeroCuenta)))
-            {
-                cambios.Add(new CambioSincronizacion
-                {
-                    Entidad = EntidadCambio.Alumno, Accion = AccionCambio.Baja,
-                    Clave = local.NumeroCuenta, Nombre = local.Nombre,
-                    Detalle = $"BAJA alumno {local.NumeroCuenta} — {local.Nombre}",
-                });
-            }
+            // Sin propuestas de baja: la hoja de Cambios es una lista de
+            // propuestas (altas y cambios), no el catálogo completo. Lo que
+            // está en base y no en hoja simplemente no se propone; las bajas
+            // se hacen en la app local (con su protección de historial).
             return cambios;
         }
 
@@ -343,14 +336,12 @@ namespace LabInventario.Services
         {
             var cambios = new List<CambioSincronizacion>();
             var locales = _materiales.Listar().ToDictionary(m => m.CodigoBarras, m => m, StringComparer.Ordinal);
-            var vistos = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var f in filas)
             {
                 var nombre = f[0].Trim();
                 var codigo = f[1].Trim();
                 if (codigo.Length == 0 || !int.TryParse(f[2].Trim(), out var total) || total < 0) continue;
-                vistos.Add(codigo);
                 if (!locales.TryGetValue(codigo, out var local))
                 {
                     cambios.Add(new CambioSincronizacion
@@ -371,15 +362,7 @@ namespace LabInventario.Services
                 }
             }
 
-            foreach (var local in locales.Values.Where(m => !vistos.Contains(m.CodigoBarras)))
-            {
-                cambios.Add(new CambioSincronizacion
-                {
-                    Entidad = EntidadCambio.Material, Accion = AccionCambio.Baja,
-                    Clave = local.CodigoBarras, Nombre = local.Nombre,
-                    Detalle = $"BAJA material {local.CodigoBarras} — {local.Nombre}",
-                });
-            }
+            // Igual que en alumnos: sin bajas automáticas (ver arriba).
             return cambios;
         }
 

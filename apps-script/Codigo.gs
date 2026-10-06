@@ -2,13 +2,17 @@
  * LabInventario — Puente de sincronización (Google Apps Script).
  *
  * INSTALACIÓN (una vez por laboratorio, ~5 minutos):
- *  1. Con la cuenta Google del laboratorio, abrir script.google.com → proyecto nuevo → pegar este archivo → guardar.
- *  2. Ejecutar UNA vez la función configurar() (crea el spreadsheet con sus
- *     4 pestañas y guarda la clave inicial; anótala).
+ *  1. Con la cuenta Google del laboratorio, crear el spreadsheet vacío
+ *     (ej. "LabInventario - LAB-1") y dentro de él abrir Extensiones →
+ *     Apps Script (así queda vinculado; evita el error de hoja nula).
+ *  2. Pegar este archivo → guardar → ejecutar UNA vez configurar() (crea
+ *     las pestañas y guarda la clave inicial; anótala desde ⚙️ Propiedades).
  *  3. Desplegar → Nueva implementación → tipo "App web" → Ejecutar como: yo →
  *     Acceso: cualquiera → Desplegar → autorizar una sola vez.
  *  4. Copiar la URL /exec. En la app (admin): pegarla en "URL del script" junto
  *     con la clave → Probar conexión → listo.
+ *  Alternativa: script standalone en script.google.com + ID de la hoja en la
+ *  propiedad SPREADSHEET_ID.
  *
  * PROTOCOLO (la app solo hace GET/POST con {clave, accion, ...}):
  *  - GET  ?clave=&accion=ping                                   → {ok:true}
@@ -94,7 +98,17 @@ function verificarClave(clave) {
 }
 
 function libro() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+  var ss = null;
+  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) { ss = null; }
+  if (ss) return ss;
+  // Script standalone (creado en script.google.com): se abre la hoja por ID.
+  var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || '';
+  if (!id) {
+    throw new Error('El script no está vinculado a ninguna hoja: créalo desde ' +
+      'Extensiones → Apps Script dentro del spreadsheet del laboratorio, o guarda ' +
+      'el ID en la propiedad SPREADSHEET_ID.');
+  }
+  return SpreadsheetApp.openById(id);
 }
 
 function asegurarEstructura() {
@@ -103,7 +117,7 @@ function asegurarEstructura() {
     if (nombre === 'Cambios') return; // Cambios usa las mismas pestañas de catálogo
     var hoja = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
     if (hoja.getLastRow() === 0) {
-      hoja.getRange(1, 1, 1, PESTANAS[nombre].length).setValues([PESTANAS[nombre]]);
+      escribirTexto(hoja, [PESTANAS[nombre]]);
     }
   });
   // El archivo de Cambios es el MISMO spreadsheet: pestañas Alumnos/Inventario
@@ -112,9 +126,26 @@ function asegurarEstructura() {
   HOJAS_CAMBIOS.forEach(function (nombre) {
     var hoja = ss.getSheetByName('Cambios_' + nombre) || ss.insertSheet('Cambios_' + nombre);
     if (hoja.getLastRow() === 0) {
-      hoja.getRange(1, 1, 1, PESTANAS[nombre].length).setValues([PESTANAS[nombre]]);
+      escribirTexto(hoja, [PESTANAS[nombre]]);
     }
   });
+}
+
+// Escribe filas como TEXTO PLANO (formato '@' antes de los valores): evita
+// que Sheets convierta fechas ("2026-09-15 08:00:00" → Date) o números
+// largos, lo que hacía que todo "cambiara" en cada sincronización.
+function escribirTexto(hoja, filas) {
+  if (!filas || filas.length === 0) return;
+  var columnas = filas[0].length;
+  hoja.getRange(1, 1, filas.length, columnas).setNumberFormat('@');
+  hoja.getRange(1, 1, filas.length, columnas).setValues(filas);
+}
+
+function agregarTexto(hoja, inicio, filas) {
+  if (!filas || filas.length === 0) return;
+  var columnas = filas[0].length;
+  hoja.getRange(inicio, 1, filas.length, columnas).setNumberFormat('@');
+  hoja.getRange(inicio, 1, filas.length, columnas).setValues(filas);
 }
 
 function nombreReal(pestana) {
@@ -137,7 +168,7 @@ function agregarFilas(pestana, filas) {
   if (!filas || filas.length === 0) return 0;
   var hoja = libro().getSheetByName(nombreReal(pestana)) || libro().insertSheet(nombreReal(pestana));
   var inicio = hoja.getLastRow() + 1;
-  hoja.getRange(inicio, 1, filas.length, filas[0].length).setValues(filas);
+  agregarTexto(hoja, inicio, filas);
   return filas.length;
 }
 
@@ -145,7 +176,7 @@ function reescribirPestana(pestana, filas) {
   var hoja = libro().getSheetByName(nombreReal(pestana)) || libro().insertSheet(nombreReal(pestana));
   hoja.clearContents();
   if (filas && filas.length > 0) {
-    hoja.getRange(1, 1, filas.length, filas[0].length).setValues(filas);
+    escribirTexto(hoja, filas);
   }
 }
 
@@ -186,7 +217,7 @@ function sincronizarHistorial(pestana, filas, encabezado) {
   });
   var salida = [head].concat(grilla);
   hoja.clearContents();
-  hoja.getRange(1, 1, salida.length, head.length).setValues(salida);
+  escribirTexto(hoja, salida);
   return { agregadas: agregadas, actualizadas: actualizadas };
 }
 

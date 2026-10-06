@@ -88,6 +88,27 @@ namespace LabInventario.Tests
         }
 
         [Fact]
+        public async Task SincronizarHistorial_EnviaEncabezadoYFilas_ParseaConteos()
+        {
+            string? cuerpo = null;
+            Configurar(req =>
+            {
+                cuerpo = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(new { ok = true, agregadas = 2, actualizadas = 1 });
+            });
+
+            var (agregadas, actualizadas) = await _cliente.SincronizarHistorialAsync(
+                "principal", "Historial", new[] { "PrestamoId", "Estado" },
+                new List<List<string>> { new() { "1", "Devuelto" } });
+
+            Assert.Equal(2, agregadas);
+            Assert.Equal(1, actualizadas);
+            Assert.Contains("\"accion\":\"sincronizarHistorial\"", cuerpo!);
+            Assert.Contains("\"pestana\":\"Historial\"", cuerpo!);
+            Assert.Contains("PrestamoId", cuerpo!);
+        }
+
+        [Fact]
         public async Task RespuestaOkFalse_LanzaConMensajeDelScript()
         {
             Configurar(_ => Json(new { ok = false, error = "No autorizado." }));

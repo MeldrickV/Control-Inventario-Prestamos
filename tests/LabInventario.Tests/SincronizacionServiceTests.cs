@@ -23,7 +23,7 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task SubirHistorial_SubeSoloNuevos_YAvanzaMarcador()
+        public async Task SubirHistorial_DevolucionTotal_ActualizaEnSuLugar()
         {
             ConfigurarSync();
             CrearAlumnoYMaterial();
@@ -33,21 +33,61 @@ namespace LabInventario.Tests
             var primera = await _sync.SubirHistorialAsync();
             Assert.False(primera.Omitido);
             Assert.Equal(2, primera.Subidos);
-            Assert.Equal("2", _config.Obtener(SincronizacionService.ClaveMarcador));
+            Assert.Equal(0, primera.Actualizados);
 
-            Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 1, FechaPrueba(3));
+            Servicio.RegistrarEntrada(CuentaAlumno, CodigoMaterial, 2, FechaPrueba(3)); // devuelve todo el préstamo 1
             var segunda = await _sync.SubirHistorialAsync();
-            Assert.Equal(1, segunda.Subidos);
+            Assert.Equal(0, segunda.Subidos);
+            Assert.Equal(1, segunda.Actualizados);
 
             var rejilla = _fake.Leer(Hoja, "Historial");
-            Assert.Equal(3, rejilla.Count); // solo filas de datos, sin duplicar
-            Assert.Equal("3", rejilla[2][0]); // PrestamoId de la última
-            Assert.Equal(CuentaAlumno, rejilla[2][2]);
-            Assert.Equal(CodigoMaterial, rejilla[2][4]);
+            Assert.Equal(3, rejilla.Count); // encabezado + 2 filas, sin duplicar
+            Assert.Equal("Devuelto", rejilla[1][9]);
+            Assert.NotEqual("", rejilla[1][8]); // FechaRegreso informada
+            Assert.Equal("Activo", rejilla[2][9]);
+            Assert.Equal("3", rejilla[2][5]);
         }
 
         [Fact]
-        public async Task SubirHistorial_SinRed_NoAvanzaMarcador_YReintentaSinDuplicar()
+        public async Task SubirHistorial_DevolucionParcial_AjustaCantidadYAgregaFila()
+        {
+            ConfigurarSync();
+            CrearAlumnoYMaterial();
+            Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 3, FechaPrueba(1));
+
+            var primera = await _sync.SubirHistorialAsync();
+            Assert.Equal(1, primera.Subidos);
+
+            Servicio.RegistrarEntrada(CuentaAlumno, CodigoMaterial, 1, FechaPrueba(2)); // parcial: 3 → 2 + fila devuelta
+            var segunda = await _sync.SubirHistorialAsync();
+            Assert.Equal(1, segunda.Subidos);
+            Assert.Equal(1, segunda.Actualizados);
+
+            var rejilla = _fake.Leer(Hoja, "Historial");
+            Assert.Equal(3, rejilla.Count); // encabezado + original ajustado + fila devuelta
+            Assert.Equal("2", rejilla[1][5]); // cantidad restante del préstamo 1
+            Assert.Equal("Activo", rejilla[1][9]);
+            Assert.Equal("1", rejilla[2][5]);
+            Assert.Equal("Devuelto", rejilla[2][9]);
+        }
+
+        [Fact]
+        public async Task SubirHistorial_SinCambios_NoAgregaNiActualiza()
+        {
+            ConfigurarSync();
+            CrearAlumnoYMaterial();
+            Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 1, FechaPrueba(1));
+
+            await _sync.SubirHistorialAsync();
+            var segunda = await _sync.SubirHistorialAsync();
+
+            Assert.Equal(0, segunda.Subidos);
+            Assert.Equal(0, segunda.Actualizados);
+            Assert.Equal(2, _fake.Leer(Hoja, "Historial").Count);
+        }
+
+        [Fact]
+        public async Task SubirHistorial_SinRed_LanzaYReintentaSinDuplicar()
         {
             ConfigurarSync();
             CrearAlumnoYMaterial();
@@ -55,12 +95,12 @@ namespace LabInventario.Tests
 
             _fake.FallarRed = true;
             await Assert.ThrowsAsync<HttpRequestException>(() => _sync.SubirHistorialAsync());
-            Assert.Null(_config.Obtener(SincronizacionService.ClaveMarcador));
+            Assert.Empty(_fake.Leer(Hoja, "Historial"));
 
             _fake.FallarRed = false;
             var resultado = await _sync.SubirHistorialAsync();
             Assert.Equal(1, resultado.Subidos);
-            Assert.Single(_fake.Leer(Hoja, "Historial"));
+            Assert.Equal(2, _fake.Leer(Hoja, "Historial").Count); // encabezado + 1 fila
         }
 
         [Fact]

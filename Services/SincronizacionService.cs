@@ -6,7 +6,7 @@ namespace LabInventario.Services
     public sealed class ResultadoSubida
     {
         public int Subidos { get; set; }
-        public int Marcador { get; set; }
+        public int Actualizados { get; set; }
         public string Mensaje { get; set; } = string.Empty;
 
         /// <summary>True si no se intentó nada (sin configurar o sin cliente).</summary>
@@ -39,7 +39,6 @@ namespace LabInventario.Services
         public const string ClaveComputadora = "Sync.ComputadoraId";
         public const string ClaveLaboratorio = "Sync.LaboratorioNombre";
         public const string ClaveIntervalo = "Sync.IntervaloMinutos";
-        public const string ClaveMarcador = "Sync.UltimoPrestamoSubido";
         public const string ClaveUltimaSync = "Sync.UltimaSincronizacion";
 
         public const string TabHistorial = "Historial";
@@ -131,37 +130,34 @@ namespace LabInventario.Services
         // ---------------- Subida del historial (automática) ----------------
 
         /// <summary>
-        /// Envía a la pestaña Historial los préstamos con Id mayor al
-        /// marcador local. El marcador solo avanza si la hoja confirma
-        /// todas las filas: ante un fallo de red no se pierde nada y el
-        /// próximo intento reenvía lo pendiente sin duplicar.
+        /// Envía el historial local COMPLETO y la nube hace upsert por
+        /// PrestamoId (actualiza lo que cambió —devoluciones totales y
+        /// parciales—, agrega lo nuevo y nunca borra). Ante un fallo de red
+        /// no se confirma nada y el próximo intento reenvía el estado
+        /// completo, que se autocorrige solo.
         /// </summary>
         public async Task<ResultadoSubida> SubirHistorialAsync(CancellationToken ct = default)
         {
             var resultado = new ResultadoSubida { Omitido = true };
             if (!Configurada)
             {
-                resultado.Mensaje = "Sincronización no configurada (falta conectar la cuenta).";
+                resultado.Mensaje = "Sincronización no configurada (falta la URL o la clave).";
                 return resultado;
             }
             if (_sheets is null)
             {
-                resultado.Mensaje = "Cliente de Google aún no conectado.";
+                resultado.Mensaje = "Sin conexión con el script.";
                 return resultado;
             }
 
-            var marcador = 0;
-            int.TryParse(_config.Obtener(ClaveMarcador) ?? "0", out marcador);
-            resultado.Marcador = marcador;
-
-            var nuevos = _prestamos.ListarDetallado().Where(p => p.Id > marcador).OrderBy(p => p.Id).ToList();
-            if (nuevos.Count == 0)
+            var todos = _prestamos.ListarDetallado().OrderBy(p => p.Id).ToList();
+            if (todos.Count == 0)
             {
-                resultado.Mensaje = "Historial al día: no hay préstamos nuevos que subir.";
+                resultado.Mensaje = "No hay préstamos registrados.";
                 return resultado;
             }
 
-            var filas = nuevos.Select(p => new List<string>
+            var filas = todos.Select(p => new List<string>
             {
                 p.Id.ToString(), p.AlumnoNombre, p.NumeroCuenta, p.MaterialNombre, p.CodigoBarras,
                 p.Cantidad.ToString(), p.CablesExtra.ToString(),
@@ -170,18 +166,16 @@ namespace LabInventario.Services
                 p.Estado, Guid.NewGuid().ToString("N"),
             }).ToList();
 
-            var confirmadas = await _sheets.AgregarFilasAsync(TiendaPrincipal, $"{TabHistorial}!A:K", filas, ct);
-            if (confirmadas < filas.Count)
-                throw new InvalidOperationException(
-                    $"Drive confirmó {confirmadas} de {filas.Count} filas; se reintentará en la próxima sincronización (marcador sin avanzar).");
+            var (agregadas, actualizadas) = await _sheets.SincronizarHistorialAsync(
+                TiendaPrincipal, TabHistorial, EncabezadoHistorial, filas, ct);
 
-            var maximo = nuevos.Max(p => p.Id);
-            _config.Establecer(ClaveMarcador, maximo.ToString());
             _config.Establecer(ClaveUltimaSync, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             resultado.Omitido = false;
-            resultado.Subidos = filas.Count;
-            resultado.Marcador = maximo;
-            resultado.Mensaje = $"Historial subido: {filas.Count} préstamo(s) nuevo(s).";
+            resultado.Subidos = agregadas;
+            resultado.Actualizados = actualizadas;
+            resultado.Mensaje = agregadas == 0 && actualizadas == 0
+                ? "Historial al día: sin cambios que subir."
+                : $"Historial sincronizado: {agregadas} fila(s) nueva(s), {actualizadas} actualizada(s).";
             return resultado;
         }
 

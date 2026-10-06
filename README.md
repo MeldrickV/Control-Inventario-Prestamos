@@ -164,7 +164,7 @@ Cambios_Inventario → igual que Inventario (lo edita el revisor)
 
 Flujos:
 
-- **Subida automática del historial**: al cerrar la aplicación se agregan al `Historial` los préstamos nuevos (marcador local `Sync.UltimoPrestamoSubido`; sin red queda en cola y se reintenta después, sin duplicar).
+- **Subida automática del historial**: al cerrar la aplicación se sincroniza el historial completo con `Historial` por `PrestamoId`: lo nuevo se agrega y las devoluciones (totales o parciales) corrigen la fila en su lugar, sin duplicar. La nube nunca borra: la purga manual local no elimina el respaldo. Sin red queda en cola y el próximo intento se autocorrige solo.
 - **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` con el botón "Publicar catálogo" de Exportar datos. Es la única vía de subida del catálogo.
 - **Bajada con confirmación**: la app revisa las pestañas de `Cambios` (que el revisor edita en su lugar) al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias se muestra un diálogo con lo que se propone (altas, cambios, bajas) y solo se aplica lo confirmado; después `Cambios` vuelve a quedar en encabezados para la siguiente ronda. Las bajas de registros con historial se bloquean, como en el borrado local.
 

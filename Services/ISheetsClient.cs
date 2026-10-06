@@ -41,5 +41,14 @@ namespace LabInventario.Services
 
         /// <summary>Crea las pestañas que falten en la hoja indicada.</summary>
         Task AsegurarPestanasAsync(string spreadsheetId, string[] pestanas, CancellationToken ct = default);
+
+        /// <summary>
+        /// Sincroniza el historial completo: actualiza por PrestamoId
+        /// (columna A) lo que cambió, agrega lo nuevo y nunca borra.
+        /// Devuelve (agregadas, actualizadas).
+        /// </summary>
+        Task<(int Agregadas, int Actualizadas)> SincronizarHistorialAsync(
+            string spreadsheetId, string pestana, string[] encabezado, List<List<string>> filas,
+            CancellationToken ct = default);
     }
 }

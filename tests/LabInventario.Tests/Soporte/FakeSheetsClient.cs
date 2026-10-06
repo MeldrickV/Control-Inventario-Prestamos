@@ -63,6 +63,50 @@ namespace LabInventario.Tests
             return Task.CompletedTask;
         }
 
+        public Task<(int Agregadas, int Actualizadas)> SincronizarHistorialAsync(
+            string spreadsheetId, string pestana, string[] encabezado, List<List<string>> filas,
+            CancellationToken ct = default)
+        {
+            RevisarRed();
+            var clave = spreadsheetId + "|" + pestana;
+            if (!_pestanas.TryGetValue(clave, out var rejilla))
+            {
+                rejilla = new List<List<string>>();
+                _pestanas[clave] = rejilla;
+            }
+            if (rejilla.Count == 0) rejilla.Add(encabezado.ToList());
+            var indice = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var i = 1; i < rejilla.Count; i++)
+            {
+                if (rejilla[i].Count > 0 && rejilla[i][0].Length > 0 && !indice.ContainsKey(rejilla[i][0]))
+                    indice[rejilla[i][0]] = i;
+            }
+            int agregadas = 0, actualizadas = 0;
+            foreach (var f in filas)
+            {
+                var fila = f.ToList();
+                if (fila.Count == 0 || fila[0].Length == 0) continue;
+                if (indice.TryGetValue(fila[0], out var pos))
+                {
+                    if (!IgualesSinUltima(rejilla[pos], fila)) { rejilla[pos] = fila; actualizadas++; }
+                }
+                else { indice[fila[0]] = rejilla.Count; rejilla.Add(fila); agregadas++; }
+            }
+            return Task.FromResult((agregadas, actualizadas));
+        }
+
+        private static bool IgualesSinUltima(List<string> a, List<string> b)
+        {
+            var n = Math.Max(a.Count, b.Count) - 1;
+            for (var i = 0; i < n; i++)
+            {
+                var x = i < a.Count ? a[i] : "";
+                var y = i < b.Count ? b[i] : "";
+                if (!string.Equals(x, y, StringComparison.Ordinal)) return false;
+            }
+            return true;
+        }
+
         private int _contadorHojas;
 
         public Task<string> CrearHojaCalculoAsync(string titulo, CancellationToken ct = default)

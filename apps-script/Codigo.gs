@@ -16,6 +16,9 @@
  *  - POST {clave, accion:"agregar", pestana, filas}             → {ok:true, confirmadas:N}
  *  - POST {clave, accion:"reescribir", pestana, filas}          → {ok:true} (vacía y escribe desde A1)
  *  - POST {clave, accion:"asegurar"}                            → {ok:true} (crea pestañas+encabezados si faltan)
+ *  - POST {clave, accion:"sincronizarHistorial", pestana, encabezado, filas}
+ *      → {ok:true, agregadas:N, actualizadas:M} (upsert por PrestamoId:
+ *        actualiza lo que cambió, agrega lo nuevo, nunca borra; ignora SyncId)
  *
  * SEGURIDAD: cada petición debe traer la clave guardada en las Propiedades
  * del script (la pone configurar(); cámbiala ahí y en la app). Sin clave
@@ -64,6 +67,7 @@ function doPost(e) {
       if (accion === 'agregar') return { confirmadas: agregarFilas(pestana, filas) };
       if (accion === 'reescribir') { reescribirPestana(pestana, filas); return {}; }
       if (accion === 'asegurar') { asegurarEstructura(); return {}; }
+      if (accion === 'sincronizarHistorial') return sincronizarHistorial(pestana, filas, cuerpo.encabezado);
     } finally {
       candado.releaseLock();
     }
@@ -143,4 +147,60 @@ function reescribirPestana(pestana, filas) {
   if (filas && filas.length > 0) {
     hoja.getRange(1, 1, filas.length, filas[0].length).setValues(filas);
   }
+}
+
+// Sincroniza el historial completo: por cada fila busca su PrestamoId
+// (columna A); si existe y cambió → actualiza, si no existe → agrega, y
+// nunca borra (la purga local no toca el respaldo). Compara columnas 0-9;
+// SyncId (col 10) se regenera en cada envío y se ignora. Todo se escribe
+// en una sola operación al final.
+function sincronizarHistorial(pestana, filas, encabezado) {
+  var head = (encabezado && encabezado.length > 0)
+    ? encabezado.map(String)
+    : PESTANAS['Historial'];
+  var hoja = libro().getSheetByName(nombreReal(pestana)) || libro().insertSheet(nombreReal(pestana));
+  var actuales = hoja.getLastRow() === 0 ? [] : hoja.getDataRange().getValues();
+  var grilla = [];
+  var indice = {}; // PrestamoId (texto) -> posición en grilla
+  var inicio = 0;
+  if (actuales.length > 0 && actuales[0].map(String).join('|') === head.join('|')) inicio = 1;
+  for (var i = inicio; i < actuales.length; i++) {
+    var previa = normalizarFila(actuales[i], head.length);
+    grilla.push(previa);
+    if (previa[0] !== '') indice[previa[0]] = grilla.length - 1;
+  }
+  var agregadas = 0, actualizadas = 0;
+  (filas || []).forEach(function (f) {
+    var fila = normalizarFila(f, head.length);
+    if (fila[0] === '') return;
+    if (indice.hasOwnProperty(fila[0])) {
+      if (!igualesSinSync(grilla[indice[fila[0]]], fila)) {
+        grilla[indice[fila[0]]] = fila;
+        actualizadas++;
+      }
+    } else {
+      indice[fila[0]] = grilla.length;
+      grilla.push(fila);
+      agregadas++;
+    }
+  });
+  var salida = [head].concat(grilla);
+  hoja.clearContents();
+  hoja.getRange(1, 1, salida.length, head.length).setValues(salida);
+  return { agregadas: agregadas, actualizadas: actualizadas };
+}
+
+function normalizarFila(fila, n) {
+  var r = (fila || []).map(String);
+  while (r.length < n) r.push('');
+  return r.slice(0, n);
+}
+
+function igualesSinSync(a, b) {
+  for (var c = 0; c < 10; c++) {
+    var x = a.length > c ? a[c] : '';
+    var y = b.length > c ? b[c] : '';
+    if (x !== y) return false;
+  }
+  return true;
 }

@@ -92,6 +92,30 @@ namespace LabInventario.Services
             await AsegurarAsync(ct);
         }
 
+        public async Task<(int Agregadas, int Actualizadas)> SincronizarHistorialAsync(
+            string spreadsheetId, string pestana, string[] encabezado, List<List<string>> filas,
+            CancellationToken ct = default)
+        {
+            using var contenido = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    clave = _clave,
+                    accion = "sincronizarHistorial",
+                    pestana = ResolverPestana(spreadsheetId, pestana),
+                    encabezado,
+                    filas,
+                }),
+                Encoding.UTF8, "application/json");
+            using var respuesta = await _http.PostAsync(_url, contenido, ct);
+            var doc = await LeerJsonAsync(respuesta, ct);
+            using (doc)
+            {
+                var agregadas = doc.RootElement.TryGetProperty("agregadas", out var a) ? a.GetInt32() : 0;
+                var actualizadas = doc.RootElement.TryGetProperty("actualizadas", out var m) ? m.GetInt32() : 0;
+                return (agregadas, actualizadas);
+            }
+        }
+
         /// <summary>Llama a `asegurar` del script (crea pestañas+encabezados si faltan).</summary>
         public async Task AsegurarAsync(CancellationToken ct = default)
         {

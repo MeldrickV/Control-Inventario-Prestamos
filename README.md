@@ -155,18 +155,21 @@ Cada laboratorio sincroniza con **su propia cuenta de Google** mediante un Apps 
 Estructura por laboratorio (un spreadsheet con pestañas, encabezado en la primera fila):
 
 ```text
-Historial          → PrestamoId, Alumno, NumeroCuenta, Material, CodigoBarras, Cantidad, CablesExtra, FechaSalida, FechaRegreso, Estado, SyncId
-Alumnos            → Nombre, NumeroCuenta
-Inventario         → Nombre, CodigoBarras, CantidadTotal
-Cambios_Alumnos    → igual que Alumnos (lo edita el revisor)
-Cambios_Inventario → igual que Inventario (lo edita el revisor)
+Historial   → PrestamoId, Alumno, NumeroCuenta, Material, CodigoBarras, Cantidad, CablesExtra, FechaSalida, FechaRegreso, Estado, SyncId
+Alumnos     → Nombre, NumeroCuenta
+Inventario  → Nombre, CodigoBarras, CantidadTotal
 ```
+
+`Alumnos` e `Inventario` son el **catálogo definitivo compartido**: el revisor edita directo ahí (agregar/editar/borrar filas). `Historial` es solo lectura para humanos (la app lo mantiene).
 
 Flujos:
 
 - **Subida automática del historial**: al cerrar la aplicación se sincroniza el historial completo con `Historial` por `PrestamoId`: lo nuevo se agrega y las devoluciones (totales o parciales) corrigen la fila en su lugar, sin duplicar. La nube nunca borra: la purga manual local no elimina el respaldo. Sin red queda en cola y el próximo intento se autocorrige solo.
-- **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` con el botón "Publicar catálogo" de Exportar datos. Es la única vía de subida del catálogo.
-- **Bajada con confirmación**: la app revisa las pestañas de `Cambios` (que el revisor edita en su lugar) al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias se muestra un diálogo con lo que se propone (**altas y cambios**) y solo se aplica lo confirmado; después `Cambios` vuelve a quedar en encabezados para la siguiente ronda. `Cambios` es lista de propuestas, no el catálogo completo: lo que falta ahí **no** se propone borrar; las bajas se hacen en la app local (con su protección de historial).
+- **Publicación manual del catálogo**: el administrador reescribe `Alumnos` e `Inventario` con el botón "Publicar catálogo" de Exportar datos (fuerza que la hoja quede igual a la base).
+- **Bajada con confirmación y selección por renglón**: la app revisa el catálogo de la hoja al abrir, con el botón "Sincronizar ahora" y cada N minutos (configurable, por defecto 5). Si hay diferencias se muestra un diálogo con casillas (altas, cambios y bajas): lo marcado se aplica, **lo no marcado se restaura en la hoja** con los datos locales y Cancelar no toca nada. Las bajas con historial se bloquean, como en el borrado local.
+- **Guardián anti-vaciados**: si las bajas propuestas son muchas (≥ 5 y > 25 % del catálogo), avisa antes del diálogo por si la hoja se vació por error.
+
+Reglas para el revisor: nunca vaciar una pestaña completa; los borrados se proponen quitando la fila (la app los confirma); lo rechazado vuelve a aparecer hasta aplicarse o quitarse de la hoja de común acuerdo.
 - **Formato de celdas**: el script escribe todo como texto plano para que Sheets no convierta fechas ni códigos largos (eso hacía que todo pareciera "cambiado" siempre). Tras actualizar el script, la primera sincronización reporta varias filas actualizadas (puesta al día única) y luego se estabiliza en cero.
 
 Vinculación (todo desde la app ya compilada; un solo ejecutable para todos):

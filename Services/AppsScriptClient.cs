@@ -12,18 +12,13 @@ namespace LabInventario.Services
     /// configuradas en el diálogo del administrador.
     ///
     /// El script administra UN spreadsheet con pestañas Historial,
-    /// Alumnos, Inventario y Cambios_Alumnos/Cambios_Inventario. El
-    /// <c>spreadsheetId</c> de la interfaz selecciona la tienda lógica:
-    /// "principal" (Historial/Alumnos/Inventario) o "cambios"
-    /// (Cambios_Alumnos/Cambios_Inventario, lo que el revisor edita).
+    /// Alumnos e Inventario (catálogo definitivo compartido: el revisor
+    /// edita directo ahí). El <c>spreadsheetId</c> de la interfaz se ignora.
     /// </summary>
     public class AppsScriptClient : ISheetsClient
     {
         public const string ClaveScriptUrl = "Sync.ScriptUrl";
         public const string ClaveSecreta = "Sync.ClaveSecreta";
-
-        public const string TiendaPrincipal = "principal";
-        public const string TiendaCambios = "cambios";
 
         private readonly HttpClient _http;
         private readonly string _url;
@@ -84,7 +79,7 @@ namespace LabInventario.Services
         public async Task<string> CrearHojaCalculoAsync(string titulo, CancellationToken ct = default)
         {
             await AsegurarAsync(ct);
-            return TiendaPrincipal;
+            return titulo;
         }
 
         public async Task AsegurarPestanasAsync(string spreadsheetId, string[] pestanas, CancellationToken ct = default)
@@ -128,11 +123,9 @@ namespace LabInventario.Services
 
         private static string ResolverPestana(string tienda, string rango)
         {
+            _ = tienda; // tienda única: se ignora, solo importa la pestaña.
             var corte = rango.IndexOf('!');
-            var pestana = (corte < 0 ? rango : rango[..corte]).Trim();
-            if (tienda == TiendaCambios && (pestana == "Alumnos" || pestana == "Inventario"))
-                return "Cambios_" + pestana;
-            return pestana;
+            return (corte < 0 ? rango : rango[..corte]).Trim();
         }
 
         private async Task<JsonDocument> PublicarAsync(string accion, string pestana, List<List<string>> filas, CancellationToken ct)

@@ -246,27 +246,45 @@ namespace LabInventario.Views
             var cambios = await sync.ObtenerCambiosPendientesAsync();
             if (cambios.Count == 0)
             {
-                await Dialogos.MostrarInfo(propietaria, subida.Mensaje + "\nNo hay cambios pendientes en el archivo de Cambios.", "Sincronización");
+                await Dialogos.MostrarInfo(propietaria, subida.Mensaje + "\nNo hay cambios pendientes en la hoja.", "Sincronización");
                 return;
             }
+            if (!await GuardianAceptaRevisionAsync(propietaria, sync, cambios)) return;
 
             var dialogo = new ConfirmarCambiosDialog(cambios);
             await dialogo.ShowDialog(propietaria);
-            if (!dialogo.Confirmado)
+            if (dialogo.Seleccionados.Count == 0 && dialogo.Rechazados.Count == 0)
             {
-                Log("Cambios del archivo de Cambios rechazados por el administrador.");
+                Log("Revisión cancelada: no se aplicó ni restauró nada.");
                 return;
             }
 
-            var resultado = await sync.AplicarCambiosAsync(cambios);
-            await sync.ConfirmarCambiosConsumidosAsync();
-            Log($"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}.");
+            var resultado = await sync.AplicarCambiosAsync(dialogo.Seleccionados);
+            await sync.RestaurarRechazadosAsync(dialogo.Rechazados);
+            Log($"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}. Restaurados en hoja: {dialogo.Rechazados.Count}.");
             foreach (var bloqueado in resultado.Bloqueados)
                 Log("Bloqueado: " + bloqueado);
             await Dialogos.MostrarInfo(propietaria,
-                $"Historial: {subida.Mensaje}\nCambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}.",
+                $"Historial: {subida.Mensaje}\nCambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}. Restaurados en hoja: {dialogo.Rechazados.Count}.",
                 "Sincronización");
             ActualizarEstadoSync();
+        }
+
+        private static async Task<bool> GuardianAceptaRevisionAsync(
+            Avalonia.Controls.Window propietaria, SincronizacionService sync, List<CambioSincronizacion> cambios)
+        {
+            var bajas = cambios.Count(c => c.Accion == AccionCambio.Baja);
+            if (bajas == 0) return true;
+
+            var (alumnos, materiales) = sync.ObtenerTotalesLocales();
+            var total = alumnos + materiales;
+            if (!SincronizacionService.PareceVaciadoAccidental(bajas, total)) return true;
+
+            return await Dialogos.Confirmar(propietaria,
+                $"La hoja propone {bajas} baja(s) de {total} registros del catálogo. " +
+                "Eso parece un vaciado accidental: si fue un error, cancela y restaura con Publicar catálogo.\n\n" +
+                "¿Revisar la lista de todos modos?",
+                "Posible vaciado accidental");
         }
 
         private async Task PublicarCatalogoAsync()

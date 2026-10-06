@@ -5,9 +5,8 @@ namespace LabInventario.Tests
 {
     public class SincronizacionServiceTests : BaseDePruebas
     {
-        // El servicio usa las tiendas lógicas "principal"/"cambios" del script.
+        // El servicio usa la tienda única "principal" del script.
         private const string Hoja = "principal";
-        private const string HojaCambios = "cambios";
 
         private readonly FakeSheetsClient _fake = new();
         private ConfiguracionRepository _config = null!;
@@ -132,36 +131,39 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task ObtenerCambiosPendientes_DetectaAltaYCambioSinProponerBajas()
+        public async Task ObtenerCambiosPendientes_DetectaAltaCambioYBaja()
         {
             ConfigurarSync();
             CrearAlumnoYMaterial();
             Alumnos.Crear("Otro alumno", "11111111");
             Materiales.Crear("9999999999999", "Otro material", 5);
 
-            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
+            // La hoja es el catálogo completo: trae todo menos un local
+            // (baja propuesta) más un alta y un cambio.
+            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
             {
                 new() { "Nombre", "NumeroCuenta" },
                 new() { "Ana Sofía Cambiada", CuentaAlumno },   // cambio de nombre
                 new() { "Alumno Nuevo", "22222222" },            // alta
-                // "11111111" ausente → ya NO propone baja (lista de propuestas)
+                // "11111111" ausente → baja propuesta (el revisor quitó la fila)
             });
-            _fake.Sembrar(HojaCambios, "Inventario", new List<List<string>>
+            _fake.Sembrar(Hoja, "Inventario", new List<List<string>>
             {
                 new() { "Nombre", "CodigoBarras", "CantidadTotal" },
                 new() { NombreMaterial, CodigoMaterial, CantidadTotalMaterial.ToString() }, // igual
                 new() { "Material Nuevo", "8888888888888", "7" },                            // alta
-                // "9999999999999" ausente → ya NO propone baja
+                // "9999999999999" ausente → baja propuesta
             });
 
             var cambios = await _sync.ObtenerCambiosPendientesAsync();
 
             Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Alumno && c.Accion == AccionCambio.Alta && c.Clave == "22222222");
             Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Alumno && c.Accion == AccionCambio.Cambio && c.Clave == CuentaAlumno);
+            Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Alumno && c.Accion == AccionCambio.Baja && c.Clave == "11111111");
             Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Material && c.Accion == AccionCambio.Alta && c.Clave == "8888888888888");
+            Assert.Contains(cambios, c => c.Entidad == EntidadCambio.Material && c.Accion == AccionCambio.Baja && c.Clave == "9999999999999");
             Assert.DoesNotContain(cambios, c => c.Entidad == EntidadCambio.Material && c.Clave == CodigoMaterial);
-            Assert.DoesNotContain(cambios, c => c.Accion == AccionCambio.Baja);
-            Assert.Equal(3, cambios.Count);
+            Assert.Equal(5, cambios.Count);
         }
 
         [Fact]
@@ -224,11 +226,10 @@ namespace LabInventario.Tests
 
             await _sync.AsegurarHojaAsync();
 
-            // El doble en memoria usa "principal"/"cambios" como tiendas.
+            // El doble en memoria usa "principal" como tienda única.
             Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("principal", "Alumnos")[0].ToArray());
             Assert.Equal(new[] { "Nombre", "CodigoBarras", "CantidadTotal" }, _fake.Leer("principal", "Inventario")[0].ToArray());
             Assert.Equal(11, _fake.Leer("principal", "Historial")[0].Count);
-            Assert.Equal(new[] { "Nombre", "NumeroCuenta" }, _fake.Leer("cambios", "Alumnos")[0].ToArray());
         }
 
         [Fact]
@@ -250,62 +251,116 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task ConfirmarCambiosConsumidos_LimpiaArchivoDeCambios()
+        public async Task RestaurarClaves_RechazoBaja_ReagregaFilaSinTocarResto()
         {
             ConfigurarSync();
             CrearAlumnoYMaterial();
-            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
+            // El revisor quitó la fila del alumno de la hoja.
+            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
+            {
+                new() { "Nombre", "NumeroCuenta" },
+                new() { "Alumno Nuevo", "22222222" },
+            });
+
+            await _sync.RestaurarClavesAsync(EntidadCambio.Alumno, new[] { CuentaAlumno });
+
+            var alumnos = _fake.Leer(Hoja, "Alumnos");
+            Assert.Equal(3, alumnos.Count);
+            Assert.Contains(alumnos, f => f[0] == NombreAlumno && f[1] == CuentaAlumno);
+            Assert.Contains(alumnos, f => f[1] == "22222222"); // lo demás intacto
+        }
+
+        [Fact]
+        public async Task RestaurarClaves_RechazoCambio_SobrescribeConLocal()
+        {
+            ConfigurarSync();
+            CrearAlumnoYMaterial();
+            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
+            {
+                new() { "Nombre", "NumeroCuenta" },
+                new() { "Nombre Editado", CuentaAlumno },
+            });
+
+            await _sync.RestaurarClavesAsync(EntidadCambio.Alumno, new[] { CuentaAlumno });
+
+            var alumnos = _fake.Leer(Hoja, "Alumnos");
+            Assert.Equal(2, alumnos.Count);
+            Assert.Equal(NombreAlumno, alumnos[1][0]); // valor local restaurado
+        }
+
+        [Fact]
+        public async Task RestaurarClaves_RechazoAlta_QuitaFilaConservandoResto()
+        {
+            ConfigurarSync();
+            CrearAlumnoYMaterial();
+            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
             {
                 new() { "Nombre", "NumeroCuenta" },
                 new() { NombreAlumno, CuentaAlumno },
+                new() { "No Deseado", "22222222" },
+            });
+
+            await _sync.RestaurarClavesAsync(EntidadCambio.Alumno, new[] { "22222222" });
+
+            var alumnos = _fake.Leer(Hoja, "Alumnos");
+            Assert.Equal(2, alumnos.Count); // encabezado + local
+            Assert.Equal(CuentaAlumno, alumnos[1][1]);
+        }
+
+        [Fact]
+        public async Task FlujoParcial_AplicaAltaYRestauraBaja()
+        {
+            ConfigurarSync();
+            CrearAlumnoYMaterial();
+            // Hoja: trae un alta y quitó al alumno local (baja propuesta).
+            _fake.Sembrar(Hoja, "Alumnos", new List<List<string>>
+            {
+                new() { "Nombre", "NumeroCuenta" },
                 new() { "Alumno Nuevo", "22222222" },
             });
-            _fake.Sembrar(HojaCambios, "Inventario", new List<List<string>>
+            _fake.Sembrar(Hoja, "Inventario", new List<List<string>>
             {
                 new() { "Nombre", "CodigoBarras", "CantidadTotal" },
                 new() { NombreMaterial, CodigoMaterial, CantidadTotalMaterial.ToString() },
             });
 
             var cambios = await _sync.ObtenerCambiosPendientesAsync();
-            var resultado = await _sync.AplicarCambiosAsync(cambios);
-            await _sync.ConfirmarCambiosConsumidosAsync();
+            Assert.Equal(2, cambios.Count); // ALTA 22222222 + BAJA CuentaAlumno
+
+            var alta = cambios.Where(c => c.Accion == AccionCambio.Alta).ToList();
+            var baja = cambios.Where(c => c.Accion == AccionCambio.Baja).ToList();
+            var resultado = await _sync.AplicarCambiosAsync(alta);
+            await _sync.RestaurarRechazadosAsync(baja);
 
             Assert.Equal(1, resultado.Aplicados);
-            Assert.NotNull(Alumnos.ObtenerPorCuenta("22222222"));
-            Assert.Single(_fake.Leer(HojaCambios, "Alumnos")); // solo encabezado
-            Assert.Single(_fake.Leer(HojaCambios, "Inventario")); // solo encabezado
-            Assert.Empty(await _sync.ObtenerCambiosPendientesAsync()); // nada pendiente después
+            Assert.NotNull(Alumnos.ObtenerPorCuenta("22222222")); // alta aplicada
+            Assert.NotNull(Alumnos.ObtenerPorCuenta(CuentaAlumno)); // baja no aplicada
+            var alumnos = _fake.Leer(Hoja, "Alumnos");
+            Assert.Contains(alumnos, f => f[1] == CuentaAlumno); // fila restaurada en hoja
+            Assert.Contains(alumnos, f => f[1] == "22222222");
+            Assert.Empty(await _sync.ObtenerCambiosPendientesAsync()); // converge en silencio
+        }
+
+        [Theory]
+        [InlineData(0, 10, false)]
+        [InlineData(4, 10, false)]
+        [InlineData(5, 20, false)]
+        [InlineData(6, 20, true)]
+        [InlineData(30, 30, true)]
+        public void PareceVaciadoAccidental_Umbrales(int bajas, int total, bool esperado)
+        {
+            Assert.Equal(esperado, SincronizacionService.PareceVaciadoAccidental(bajas, total));
         }
 
         [Fact]
-        public async Task ConfirmarCambiosConsumidos_ConEdicionIntermedia_NoBorra()
+        public void ObtenerTotalesLocales_CuentaCatalogo()
         {
-            ConfigurarSync();
             CrearAlumnoYMaterial();
-            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
-            {
-                new() { "Nombre", "NumeroCuenta" },
-                new() { NombreAlumno, CuentaAlumno },
-                new() { "Alumno Nuevo", "22222222" },
-            });
 
-            var cambios = await _sync.ObtenerCambiosPendientesAsync();
-            // El revisor agrega otra fila antes de que se confirme el consumo.
-            _fake.Sembrar(HojaCambios, "Alumnos", new List<List<string>>
-            {
-                new() { "Nombre", "NumeroCuenta" },
-                new() { NombreAlumno, CuentaAlumno },
-                new() { "Alumno Nuevo", "22222222" },
-                new() { "Otro Más", "33333333" },
-            });
+            var (alumnos, materiales) = new SincronizacionService(Db).ObtenerTotalesLocales();
 
-            await _sync.AplicarCambiosAsync(cambios);
-            await _sync.ConfirmarCambiosConsumidosAsync();
-
-            Assert.Equal(4, _fake.Leer(HojaCambios, "Alumnos").Count); // encabezado + 3 filas: no se borró
-            var pendientes = await _sync.ObtenerCambiosPendientesAsync();
-            Assert.Single(pendientes); // solo la fila realmente nueva
-            Assert.Equal("33333333", pendientes[0].Clave);
+            Assert.Equal(1, alumnos);
+            Assert.Equal(1, materiales);
         }
 
         [Fact]

@@ -40,13 +40,13 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task ObtenerValores_TiendaCambios_MapeaPestana()
+        public async Task ObtenerValores_PasaNombreDePestanaTalCual()
         {
             Configurar(_ => Json(new { ok = true, valores = new string[0][] }));
 
-            await _cliente.ObtenerValoresAsync("cambios", "Alumnos!A:B");
+            await _cliente.ObtenerValoresAsync("principal", "Alumnos!A:B");
 
-            Assert.Contains("pestana=Cambios_Alumnos", _manejador.Peticiones[0].RequestUri!.ToString());
+            Assert.Contains("pestana=Alumnos", _manejador.Peticiones[0].RequestUri!.ToString());
         }
 
         [Fact]

@@ -23,10 +23,11 @@ namespace LabInventario.Services
 
     /// <summary>
     /// Orquesta la sincronización con la nube del laboratorio (Apps Script
-    /// + Sheets): sube el historial nuevo (automático), publica el
-    /// catálogo completo (manual), detecta diferencias en la pestaña de
-    /// Cambios que edita el revisor (para confirmar en diálogo), las aplica
-    /// de forma idempotente y deja Cambios listo de nuevo.
+    /// + Sheets): sube el historial (automático, con upsert), publica el
+    /// catálogo completo (manual), detecta diferencias contra el catálogo
+    /// definitivo de la hoja (para confirmar en diálogo con selección por
+    /// renglón), las aplica de forma idempotente y restaura en la hoja lo
+    /// rechazado.
     ///
     /// La base local sigue siendo la fuente de verdad; la nube es el
     /// buzón/respaldo. El cliente de red (<see cref="ISheetsClient"/>) se
@@ -72,9 +73,8 @@ namespace LabInventario.Services
             _prestamos = new PrestamoRepository(_db);
         }
 
-        // Tiendas lógicas del script (un solo spreadsheet por laboratorio).
-        private const string TiendaPrincipal = AppsScriptClient.TiendaPrincipal;
-        private const string TiendaCambios = AppsScriptClient.TiendaCambios;
+        // Tienda única: un solo spreadsheet por laboratorio.
+        private const string Tienda = "principal";
 
         /// <summary>Hay URL y clave del script configuradas.</summary>
         public bool Configurada =>
@@ -110,8 +110,7 @@ namespace LabInventario.Services
             if (_sheets is null)
                 throw new InvalidOperationException("Sin conexión con el script (falta URL o clave).");
 
-            await AsegurarPestanasConEncabezadoAsync(TiendaPrincipal, new[] { TabHistorial, TabAlumnos, TabInventario }, ct);
-            await AsegurarPestanasConEncabezadoAsync(TiendaCambios, new[] { TabAlumnos, TabInventario }, ct);
+            await AsegurarPestanasConEncabezadoAsync(Tienda, new[] { TabHistorial, TabAlumnos, TabInventario }, ct);
             _config.Establecer(ClaveUltimaSync, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
         }
 
@@ -167,7 +166,7 @@ namespace LabInventario.Services
             }).ToList();
 
             var (agregadas, actualizadas) = await _sheets.SincronizarHistorialAsync(
-                TiendaPrincipal, TabHistorial, EncabezadoHistorial, filas, ct);
+                Tienda, TabHistorial, EncabezadoHistorial, filas, ct);
 
             _config.Establecer(ClaveUltimaSync, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             resultado.Omitido = false;
@@ -206,72 +205,88 @@ namespace LabInventario.Services
 
         // ---------------- Bajada del catálogo (para confirmar) ----------------
 
-        // Foto de lo leído en la última revisión, para solo limpiar el
-        // archivo de Cambios si nadie lo tocó mientras se aplicaba.
-        private List<List<string>>? _vistosAlumnos;
-        private List<List<string>>? _vistosInventario;
-
         /// <summary>
-        /// Lee el archivo de Cambios (lo que el revisor editó en su lugar)
-        /// y lo compara con la base local por clave de negocio, devolviendo
-        /// altas y cambios. Nunca propone bajas: la hoja es una lista de
-        /// propuestas, no el catálogo completo. Si una pestaña llega vacía
-        /// no se propone nada de esa entidad.
+        /// Lee el catálogo definitivo de la hoja (lo que el revisor edita
+        /// directo en Alumnos/Inventario) y lo compara con la base local por
+        /// clave de negocio, devolviendo altas, cambios y bajas. La hoja es
+        /// el catálogo completo compartido, así que "en base y no en hoja"
+        /// sí significa baja propuesta (con guardián aparte para vaciados
+        /// accidentales). Si una pestaña llega vacía no se propone nada de
+        /// esa entidad.
         /// </summary>
         public async Task<List<CambioSincronizacion>> ObtenerCambiosPendientesAsync(CancellationToken ct = default)
         {
             var cambios = new List<CambioSincronizacion>();
-            _vistosAlumnos = null;
-            _vistosInventario = null;
             if (!Configurada || _sheets is null) return cambios;
 
-            var alumnosHoja = await _sheets.ObtenerValoresAsync(TiendaCambios, $"{TabAlumnos}!A:B", ct);
-            var inventarioHoja = await _sheets.ObtenerValoresAsync(TiendaCambios, $"{TabInventario}!A:C", ct);
+            var alumnosHoja = await _sheets.ObtenerValoresAsync(Tienda, $"{TabAlumnos}!A:B", ct);
+            var inventarioHoja = await _sheets.ObtenerValoresAsync(Tienda, $"{TabInventario}!A:C", ct);
 
             var filasAlumnos = FilasDeDatos(alumnosHoja, EncabezadoAlumnos);
             var filasInventario = FilasDeDatos(inventarioHoja, EncabezadoInventario);
-            if (filasAlumnos is not null)
-            {
-                _vistosAlumnos = filasAlumnos.Select(f => f.ToList()).ToList();
-                cambios.AddRange(DiferenciasAlumnos(filasAlumnos));
-            }
-            if (filasInventario is not null)
-            {
-                _vistosInventario = filasInventario.Select(f => f.ToList()).ToList();
-                cambios.AddRange(DiferenciasMateriales(filasInventario));
-            }
+            if (filasAlumnos is not null) cambios.AddRange(DiferenciasAlumnos(filasAlumnos));
+            if (filasInventario is not null) cambios.AddRange(DiferenciasMateriales(filasInventario));
             return cambios;
         }
 
         /// <summary>
-        /// Tras aplicar los cambios confirmados, deja el archivo de Cambios
-        /// listo para la siguiente ronda (solo encabezados). Solo limpia si
-        /// el contenido sigue igual a lo revisado: si el revisor editó en
-        /// ese lapso, se conserva para el próximo ciclo.
+        /// Regla del guardián: advierte cuando las bajas propuestas son
+        /// muchas (>= 5 y más del 25 % del catálogo local), señal típica de
+        /// un vaciado accidental de la hoja. No bloquea, solo obliga a
+        /// revisar antes del diálogo.
         /// </summary>
-        public async Task ConfirmarCambiosConsumidosAsync(CancellationToken ct = default)
+        public static bool PareceVaciadoAccidental(int bajas, int totalLocal) =>
+            bajas >= 5 && totalLocal > 0 && bajas > totalLocal * 0.25;
+
+        /// <summary>Conteos del catálogo local (alumnos, materiales) para el guardián.</summary>
+        public (int Alumnos, int Materiales) ObtenerTotalesLocales() =>
+            (_alumnos.Listar().Count, _materiales.Listar().Count);
+
+        /// <summary>
+        /// Restauración quirúrgica tras un rechazo parcial: por cada clave
+        /// indicada deja la pestaña igual a la base (re-agrega la fila local
+        /// si la hoja la quitó, la sobrescribe si la editó, quita la fila si
+        /// solo existe en la hoja). Lo no mencionado se conserva intacto.
+        /// </summary>
+        public async Task RestaurarClavesAsync(EntidadCambio entidad, IEnumerable<string> claves, CancellationToken ct = default)
         {
             if (!Configurada || _sheets is null) return;
-            await LimpiarSiSigueIgualAsync(TabAlumnos, EncabezadoAlumnos, _vistosAlumnos, ct);
-            await LimpiarSiSigueIgualAsync(TabInventario, EncabezadoInventario, _vistosInventario, ct);
-            _vistosAlumnos = null;
-            _vistosInventario = null;
-        }
+            var pendientes = new HashSet<string>(
+                claves.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()),
+                StringComparer.Ordinal);
+            if (pendientes.Count == 0) return;
 
-        private async Task LimpiarSiSigueIgualAsync(string pestana, string[] encabezado, List<List<string>>? vistos, CancellationToken ct)
-        {
-            if (vistos is null) return;
-            var actual = await _sheets!.ObtenerValoresAsync(TiendaCambios, $"{pestana}!A:Z", ct);
+            var (pestana, encabezado) = entidad == EntidadCambio.Alumno
+                ? (TabAlumnos, EncabezadoAlumnos)
+                : (TabInventario, EncabezadoInventario);
+
+            var actual = await _sheets.ObtenerValoresAsync(Tienda, $"{pestana}!A:Z", ct);
             var filas = FilasDeDatos(actual, encabezado) ?? new List<List<string>>();
-            if (!MismasFilas(filas, vistos)) return;
-            await _sheets.ActualizarValoresAsync(TiendaCambios, $"{pestana}!A1",
-                new List<List<string>> { encabezado.ToList() }, ct);
+            var conservadas = filas.Where(f => !pendientes.Contains(ClaveDe(f))).ToList();
+
+            var locales = entidad == EntidadCambio.Alumno
+                ? _alumnos.Listar().Where(a => pendientes.Contains(a.NumeroCuenta))
+                    .Select(a => new List<string> { a.Nombre, a.NumeroCuenta }).ToList()
+                : _materiales.Listar().Where(m => pendientes.Contains(m.CodigoBarras))
+                    .Select(m => new List<string> { m.Nombre, m.CodigoBarras, m.CantidadTotal.ToString() }).ToList();
+
+            var salida = new List<List<string>> { encabezado.ToList() };
+            salida.AddRange(conservadas);
+            salida.AddRange(locales);
+            await _sheets.ActualizarValoresAsync(Tienda, $"{pestana}!A1", salida, ct);
         }
 
-        private static bool MismasFilas(List<List<string>> a, List<List<string>>? b)
+        private static string ClaveDe(List<string> fila) =>
+            fila.Count > 1 ? fila[1].Trim() : "";
+
+        /// <summary>
+        /// Restaura en la hoja lo rechazado en el diálogo, agrupando por
+        /// entidad. Lo aplicado se mantiene (ya converge solo).
+        /// </summary>
+        public async Task RestaurarRechazadosAsync(IEnumerable<CambioSincronizacion> rechazados, CancellationToken ct = default)
         {
-            if (b is null || a.Count != b.Count) return false;
-            return a.Zip(b).All(par => par.First.SequenceEqual(par.Second));
+            foreach (var grupo in rechazados.GroupBy(c => c.Entidad))
+                await RestaurarClavesAsync(grupo.Key, grupo.Select(c => c.Clave), ct);
         }
 
         private static List<List<string>>? FilasDeDatos(RangoValores rango, string[] encabezado)
@@ -299,12 +314,14 @@ namespace LabInventario.Services
         {
             var cambios = new List<CambioSincronizacion>();
             var locales = _alumnos.Listar().ToDictionary(a => a.NumeroCuenta, a => a, StringComparer.Ordinal);
+            var vistos = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var f in filas)
             {
                 var nombre = f[0].Trim();
                 var cuenta = f[1].Trim();
                 if (cuenta.Length == 0) continue;
+                vistos.Add(cuenta);
                 if (!locales.TryGetValue(cuenta, out var local))
                 {
                     cambios.Add(new CambioSincronizacion
@@ -325,10 +342,19 @@ namespace LabInventario.Services
                 }
             }
 
-            // Sin propuestas de baja: la hoja de Cambios es una lista de
-            // propuestas (altas y cambios), no el catálogo completo. Lo que
-            // está en base y no en hoja simplemente no se propone; las bajas
-            // se hacen en la app local (con su protección de historial).
+            // La hoja es el catálogo completo compartido: lo que está en base
+            // y no en hoja sí es una baja propuesta (el revisor quitó la
+            // fila). El guardián frena los vaciados accidentales y aplicar
+            // una baja con historial se bloquea como en el borrado local.
+            foreach (var local in locales.Values.Where(a => !vistos.Contains(a.NumeroCuenta)))
+            {
+                cambios.Add(new CambioSincronizacion
+                {
+                    Entidad = EntidadCambio.Alumno, Accion = AccionCambio.Baja,
+                    Clave = local.NumeroCuenta, Nombre = local.Nombre,
+                    Detalle = $"BAJA alumno {local.NumeroCuenta} — {local.Nombre}",
+                });
+            }
             return cambios;
         }
 
@@ -336,12 +362,14 @@ namespace LabInventario.Services
         {
             var cambios = new List<CambioSincronizacion>();
             var locales = _materiales.Listar().ToDictionary(m => m.CodigoBarras, m => m, StringComparer.Ordinal);
+            var vistos = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var f in filas)
             {
                 var nombre = f[0].Trim();
                 var codigo = f[1].Trim();
                 if (codigo.Length == 0 || !int.TryParse(f[2].Trim(), out var total) || total < 0) continue;
+                vistos.Add(codigo);
                 if (!locales.TryGetValue(codigo, out var local))
                 {
                     cambios.Add(new CambioSincronizacion
@@ -362,7 +390,16 @@ namespace LabInventario.Services
                 }
             }
 
-            // Igual que en alumnos: sin bajas automáticas (ver arriba).
+            // Igual que en alumnos: la hoja es el catálogo completo.
+            foreach (var local in locales.Values.Where(m => !vistos.Contains(m.CodigoBarras)))
+            {
+                cambios.Add(new CambioSincronizacion
+                {
+                    Entidad = EntidadCambio.Material, Accion = AccionCambio.Baja,
+                    Clave = local.CodigoBarras, Nombre = local.Nombre,
+                    Detalle = $"BAJA material {local.CodigoBarras} — {local.Nombre}",
+                });
+            }
             return cambios;
         }
 

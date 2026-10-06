@@ -264,15 +264,17 @@ namespace LabInventario.Windows
 
                 var cambios = await sync.ObtenerCambiosPendientesAsync();
                 if (cambios.Count == 0) return;
+                if (!await GuardianAceptaRevisionAsync(sync, cambios)) return;
 
                 var dialogo = new ConfirmarCambiosDialog(cambios);
                 await dialogo.ShowDialog(this);
-                if (!dialogo.Confirmado) return;
+                if (dialogo.Seleccionados.Count == 0 && dialogo.Rechazados.Count == 0) return;
 
-                var resultado = await sync.AplicarCambiosAsync(cambios);
-                await sync.ConfirmarCambiosConsumidosAsync();
+                var resultado = await sync.AplicarCambiosAsync(dialogo.Seleccionados);
+                await sync.RestaurarRechazadosAsync(dialogo.Rechazados);
                 await Dialogos.MostrarInfo(this,
-                    $"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}." +
+                    $"Cambios aplicados: {resultado.Aplicados}. Omitidos: {resultado.Omitidos}. " +
+                    $"Restaurados en hoja: {dialogo.Rechazados.Count}." +
                     (resultado.Bloqueados.Count > 0 ? "\n\nBloqueados:\n- " + string.Join("\n- ", resultado.Bloqueados) : ""),
                     "Sincronización");
             }
@@ -285,6 +287,28 @@ namespace LabInventario.Windows
                 _syncEnCurso = false;
                 _syncTimer.Interval = TimeSpan.FromMinutes(NuevaSync().IntervaloMinutos());
             }
+        }
+
+        /// <summary>
+        /// Guardián contra vaciados accidentales de la hoja: si las bajas
+        /// propuestas son muchas respecto al catálogo local, pide
+        /// confirmación explícita antes de mostrar el diálogo. Devuelve
+        /// false si hay que abortar la revisión.
+        /// </summary>
+        private async Task<bool> GuardianAceptaRevisionAsync(SincronizacionService sync, List<CambioSincronizacion> cambios)
+        {
+            var bajas = cambios.Count(c => c.Accion == AccionCambio.Baja);
+            if (bajas == 0) return true;
+
+            var (alumnos, materiales) = sync.ObtenerTotalesLocales();
+            var total = alumnos + materiales;
+            if (!SincronizacionService.PareceVaciadoAccidental(bajas, total)) return true;
+
+            return await Dialogos.Confirmar(this,
+                $"La hoja propone {bajas} baja(s) de {total} registros del catálogo. " +
+                "Eso parece un vaciado accidental: si fue un error, cancela y restaura con Publicar catálogo.\n\n" +
+                "¿Revisar la lista de todos modos?",
+                "Posible vaciado accidental");
         }
     }
 }

@@ -1,42 +1,8 @@
-/**
- * LabInventario — Puente de sincronización (Google Apps Script).
- *
- * INSTALACIÓN (una vez por laboratorio, ~5 minutos):
- *  1. Con la cuenta Google del laboratorio, crear el spreadsheet vacío
- *     (ej. "LabInventario - LAB-1") y dentro de él abrir Extensiones →
- *     Apps Script (así queda vinculado; evita el error de hoja nula).
- *  2. Pegar este archivo → guardar → ejecutar UNA vez configurar() (crea
- *     las pestañas y guarda la clave inicial; anótala desde ⚙️ Propiedades).
- *  3. Desplegar → Nueva implementación → tipo "App web" → Ejecutar como: yo →
- *     Acceso: cualquiera → Desplegar → autorizar una sola vez.
- *  4. Copiar la URL /exec. En la app (admin): pegarla en "URL del script" junto
- *     con la clave → Probar conexión → listo.
- *  Alternativa: script standalone en script.google.com + ID de la hoja en la
- *  propiedad SPREADSHEET_ID.
- *
- * PROTOCOLO (la app solo hace GET/POST con {clave, accion, ...}):
- *  - GET  ?clave=&accion=ping                                   → {ok:true}
- *  - GET  ?clave=&accion=leer&pestana=Alumnos                   → {ok:true, valores:[[...]]}
- *  - POST {clave, accion:"agregar", pestana, filas}             → {ok:true, confirmadas:N}
- *  - POST {clave, accion:"reescribir", pestana, filas}          → {ok:true} (vacía y escribe desde A1)
- *  - POST {clave, accion:"asegurar"}                            → {ok:true} (crea pestañas+encabezados si faltan)
- *  - POST {clave, accion:"sincronizarHistorial", pestana, encabezado, filas}
- *      → {ok:true, agregadas:N, actualizadas:M} (upsert por PrestamoId:
- *        actualiza lo que cambió, agrega lo nuevo, nunca borra; ignora SyncId)
- *
- * SEGURIDAD: cada petición debe traer la clave guardada en las Propiedades
- * del script (la pone configurar(); cámbiala ahí y en la app). Sin clave
- * correcta se responde error genérico sin revelar nada.
- */
-
 var PESTANAS = {
   Historial: ['PrestamoId', 'Alumno', 'NumeroCuenta', 'Material', 'CodigoBarras', 'Cantidad', 'CablesExtra', 'FechaSalida', 'FechaRegreso', 'Estado', 'SyncId'],
   Alumnos: ['Nombre', 'NumeroCuenta'],
-  Inventario: ['Nombre', 'CodigoBarras', 'CantidadTotal'],
-  Cambios: null // espejo de Alumnos+Inventario para propuestas del revisor (ver abajo)
+  Inventario: ['Nombre', 'CodigoBarras', 'CantidadTotal']
 };
-
-var HOJAS_CAMBIOS = ['Alumnos', 'Inventario'];
 
 function configurar() {
   var props = PropertiesService.getScriptProperties();
@@ -112,19 +78,11 @@ function libro() {
 }
 
 function asegurarEstructura() {
+  // Catálogo definitivo compartido: el revisor edita directo en
+  // Alumnos/Inventario. Sin pestañas de propuestas.
   var ss = libro();
   Object.keys(PESTANAS).forEach(function (nombre) {
-    if (nombre === 'Cambios') return; // Cambios usa las mismas pestañas de catálogo
     var hoja = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
-    if (hoja.getLastRow() === 0) {
-      escribirTexto(hoja, [PESTANAS[nombre]]);
-    }
-  });
-  // El archivo de Cambios es el MISMO spreadsheet: pestañas Alumnos/Inventario
-  // con el contenido que el revisor edita en su lugar. Si están vacías (solo
-  // encabezado o nada), se dejan con encabezado para que la app las lea.
-  HOJAS_CAMBIOS.forEach(function (nombre) {
-    var hoja = ss.getSheetByName('Cambios_' + nombre) || ss.insertSheet('Cambios_' + nombre);
     if (hoja.getLastRow() === 0) {
       escribirTexto(hoja, [PESTANAS[nombre]]);
     }
@@ -149,9 +107,6 @@ function agregarTexto(hoja, inicio, filas) {
 }
 
 function nombreReal(pestana) {
-  // La app pide "Alumnos"/"Inventario" para el archivo de Cambios con el
-  // prefijo "Cambios_"; el resto de pestañas van tal cual.
-  if (pestana === 'Cambios_Alumnos' || pestana === 'Cambios_Inventario') return pestana;
   return pestana;
 }
 

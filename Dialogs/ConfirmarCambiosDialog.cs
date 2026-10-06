@@ -7,15 +7,21 @@ using SukiUI.Controls;
 namespace LabInventario.Dialogs
 {
     /// <summary>
-    /// Muestra los cambios del catálogo (alumnos e inventario) detectados
-    /// en el archivo de Cambios de Drive y pide confirmación antes de
-    /// aplicarlos en la base local. Cada línea describe "lo que se está
-    /// enviando" (alta, cambio o baja con sus valores).
+    /// Muestra los cambios del catálogo definitivo de la hoja (altas,
+    /// cambios y bajas) con una casilla por renglón. Al aplicar, solo los
+    /// marcados se ejecutan en la base local; los no marcados se toman como
+    /// rechazo parcial y la app restaura esas filas en la hoja con los datos
+    /// locales. Cancelar no toca nada en ningún lado.
     /// </summary>
     public class ConfirmarCambiosDialog : SukiWindow
     {
-        /// <summary>True si el administrador eligió aplicar los cambios.</summary>
-        public bool Confirmado { get; private set; }
+        /// <summary>Renglones marcados al pulsar Aplicar.</summary>
+        public List<CambioSincronizacion> Seleccionados { get; private set; } = new();
+
+        /// <summary>Renglones sin marcar al pulsar Aplicar (rechazo parcial).</summary>
+        public List<CambioSincronizacion> Rechazados { get; private set; } = new();
+
+        private readonly List<(CambioSincronizacion Cambio, CheckBox Casilla)> _renglones = new();
 
         public ConfirmarCambiosDialog(IList<CambioSincronizacion> cambios)
         {
@@ -26,36 +32,73 @@ namespace LabInventario.Dialogs
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             SizeToContent = SizeToContent.WidthAndHeight;
 
-            var lineas = cambios.Select(c => c.Detalle).ToList();
+            var lista = new StackPanel { Spacing = 4 };
+            foreach (var cambio in cambios)
+            {
+                var casilla = new CheckBox { Content = cambio.Detalle, IsChecked = true };
+                _renglones.Add((cambio, casilla));
+                lista.Children.Add(casilla);
+            }
 
-            var btnAplicar = new Button { Content = "Aplicar cambios", Classes = { "Flat" }, MinWidth = 130, IsDefault = true };
-            btnAplicar.Click += (_, _) => { Confirmado = true; Close(); };
+            var btnTodos = new Button { Content = "Todos", Classes = { "Outlined" }, MinWidth = 80 };
+            btnTodos.Click += (_, _) => MarcarTodos(true);
 
-            var btnRechazar = new Button { Content = "Rechazar", Classes = { "Outlined" }, MinWidth = 100, IsCancel = true };
-            btnRechazar.Click += (_, _) => Close();
+            var btnNinguno = new Button { Content = "Ninguno", Classes = { "Outlined" }, MinWidth = 80 };
+            btnNinguno.Click += (_, _) => MarcarTodos(false);
+
+            var panelMarcar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+            panelMarcar.Children.Add(new TextBlock { Text = "Marcar:", VerticalAlignment = VerticalAlignment.Center });
+            panelMarcar.Children.Add(btnTodos);
+            panelMarcar.Children.Add(btnNinguno);
+
+            var btnAplicar = new Button { Content = "Aplicar seleccionados", Classes = { "Flat" }, MinWidth = 160, IsDefault = true };
+            btnAplicar.Click += (_, _) => { Recoger(); Close(); };
+
+            var btnCancelar = new Button { Content = "Cancelar", Classes = { "Outlined" }, MinWidth = 100, IsCancel = true };
+            btnCancelar.Click += (_, _) => Close();
 
             var panelBotones = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0, 14, 0, 0) };
             panelBotones.Children.Add(btnAplicar);
-            panelBotones.Children.Add(btnRechazar);
+            panelBotones.Children.Add(btnCancelar);
 
             var panel = new StackPanel { Spacing = 8, Width = 520 };
             panel.Children.Add(new TextBlock
             {
-                Text = "El archivo de Cambios trae estas propuestas para el catálogo local. " +
-                       "Revísalas y decide si se aplican:",
+                Text = "La hoja trae estas propuestas para el catálogo local. " +
+                       "Marca las que sí se aplican; lo no marcado se restaura en la hoja " +
+                       "con los datos de esta computadora. Cancelar no cambia nada.",
                 Classes = { "Caption" },
                 TextWrapping = TextWrapping.Wrap,
                 Width = 520,
             });
-            panel.Children.Add(new ListBox
+            panel.Children.Add(panelMarcar);
+            panel.Children.Add(new ScrollViewer
             {
-                ItemsSource = lineas,
+                Content = lista,
                 Width = 520,
                 MaxHeight = 320,
             });
             panel.Children.Add(panelBotones);
 
             Content = new GlassCard { Margin = new Avalonia.Thickness(20), Content = panel };
+        }
+
+        private void MarcarTodos(bool valor)
+        {
+            foreach (var (_, casilla) in _renglones)
+                casilla.IsChecked = valor;
+        }
+
+        private void Recoger()
+        {
+            Seleccionados = _renglones
+                .Where(r => r.Casilla.IsChecked == true)
+                .Select(r => r.Cambio)
+                .ToList();
+            Rechazados = _renglones
+                .Where(r => r.Casilla.IsChecked != true)
+                .Select(r => r.Cambio)
+                .ToList();
         }
     }
 }

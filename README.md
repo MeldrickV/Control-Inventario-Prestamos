@@ -90,6 +90,8 @@ También permite filtrar el historial y consultar únicamente préstamos activos
 
 **El historial no se borra automáticamente**: la aplicación conserva todas las devoluciones. Si el administrador quiere depurar registros antiguos, lo hace explícitamente desde **Administración → Limpiar historial antiguo...**, indicando la antigüedad mínima (por defecto 30 días). Antes de borrar se muestra cuántos registros se eliminarán y se pide confirmación; los préstamos activos nunca se tocan.
 
+Los alumnos y materiales **sí se pueden eliminar aunque tengan préstamos**: el historial conserva el nombre, la cuenta y el código tal como estaban al momento del préstamo, así que sus filas siguen legibles aunque el catálogo ya no los tenga. Al eliminar con historial se pide confirmación avisando esto.
+
 ### 📤 Exportación
 
 El módulo de exportación permite sacar datos en formatos abiertos o crear respaldos de la base:

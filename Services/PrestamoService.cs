@@ -96,7 +96,9 @@ namespace LabInventario.Services
 
                 var fecha = fechaSalida ?? DateTime.Now;
                 _materialRepo.AjustarDisponible(material.Id, -cantidad, conexion);
-                var prestamoId = _prestamoRepo.Crear(alumno.Id, material.Id, cantidad, fecha, conexion, cablesExtra);
+                var prestamoId = _prestamoRepo.Crear(alumno.Id, material.Id,
+                    alumno.Nombre, alumno.NumeroCuenta, material.Nombre, material.CodigoBarras,
+                    cantidad, fecha, conexion, cablesExtra);
 
                 material.CantidadDisponible -= cantidad; // reflejar el cambio en el objeto en memoria
                 resultado = new ResultadoSalida(alumno, material, prestamoId);
@@ -185,8 +187,12 @@ namespace LabInventario.Services
                         // Deja un registro nuevo y visible de lo que sí se
                         // devolvió, en vez de que la devolución parcial quede
                         // "escondida" como una simple resta de cantidad sobre
-                        // el préstamo que sigue activo.
-                        _prestamoRepo.CrearDevuelto(alumnoId, materialId, restante, prestamo.FechaSalida, fecha, conexion);
+                        // el préstamo que sigue activo. La foto sale del
+                        // propio préstamo parcializado (sigue valiendo aunque
+                        // el catálogo haya cambiado o se haya borrado).
+                        _prestamoRepo.CrearDevuelto(prestamo.AlumnoId, prestamo.MaterialId,
+                            prestamo.AlumnoNombre, prestamo.NumeroCuenta, prestamo.MaterialNombre, prestamo.CodigoBarras,
+                            restante, prestamo.FechaSalida, fecha, conexion);
                         restante = 0;
                     }
                 }
@@ -222,12 +228,18 @@ namespace LabInventario.Services
                 if (cantidad <= 0 || cantidad > prestamo.Cantidad)
                     throw new PrestamoException($"La cantidad a devolver debe ser entre 1 y {prestamo.Cantidad}.");
 
-                var alumno = _alumnoRepo.ObtenerPorId(prestamo.AlumnoId, conexion)
-                    ?? throw new PrestamoException("El alumno de ese préstamo ya no existe.");
-                var material = _materialRepo.ObtenerPorId(prestamo.MaterialId, conexion)
-                    ?? throw new PrestamoException("El material de ese préstamo ya no existe.");
+                // El alumno o material puede haberse eliminado del catálogo
+                // después del préstamo: la devolución sigue válida gracias a
+                // la foto del historial; solo se omite lo que ya no existe
+                // (validaciones y ajuste de stock de ese lado).
+                var alumno = prestamo.AlumnoId.HasValue
+                    ? _alumnoRepo.ObtenerPorId(prestamo.AlumnoId.Value, conexion)
+                    : null;
+                var material = prestamo.MaterialId.HasValue
+                    ? _materialRepo.ObtenerPorId(prestamo.MaterialId.Value, conexion)
+                    : null;
 
-                if (material.CantidadDisponible + cantidad > material.CantidadTotal)
+                if (material is not null && material.CantidadDisponible + cantidad > material.CantidadTotal)
                 {
                     throw new PrestamoException(
                         $"No se puede devolver {cantidad} de '{material.Nombre}': el stock ya está en su total.");
@@ -238,13 +250,21 @@ namespace LabInventario.Services
                 else
                 {
                     _prestamoRepo.ActualizarCantidad(prestamo.Id, prestamo.Cantidad - cantidad, conexion);
-                    _prestamoRepo.CrearDevuelto(prestamo.AlumnoId, prestamo.MaterialId, cantidad, prestamo.FechaSalida, fecha, conexion);
+                    _prestamoRepo.CrearDevuelto(prestamo.AlumnoId, prestamo.MaterialId,
+                        prestamo.AlumnoNombre, prestamo.NumeroCuenta, prestamo.MaterialNombre, prestamo.CodigoBarras,
+                        cantidad, prestamo.FechaSalida, fecha, conexion);
                 }
 
-                _materialRepo.AjustarDisponible(prestamo.MaterialId, cantidad, conexion);
-                material.CantidadDisponible += cantidad;
+                if (material is not null)
+                {
+                    _materialRepo.AjustarDisponible(material.Id, cantidad, conexion);
+                    material.CantidadDisponible += cantidad;
+                }
 
-                resultado = new ResultadoEntrada(alumno, material, cantidad);
+                resultado = new ResultadoEntrada(
+                    alumno ?? new Alumno { Id = -1, Nombre = prestamo.AlumnoNombre, NumeroCuenta = prestamo.NumeroCuenta },
+                    material ?? new Material { Id = -1, CodigoBarras = prestamo.CodigoBarras, Nombre = prestamo.MaterialNombre },
+                    cantidad);
             });
             return resultado!;
         }
@@ -295,7 +315,9 @@ namespace LabInventario.Services
                         }
 
                         _materialRepo.AjustarDisponible(material.Id, -item.Cantidad, conexion);
-                        _prestamoRepo.Crear(alumno.Id, material.Id, item.Cantidad, fechaOperacion, conexion, item.CablesExtra);
+                        _prestamoRepo.Crear(alumno.Id, material.Id,
+                            alumno.Nombre, alumno.NumeroCuenta, material.Nombre, material.CodigoBarras,
+                            item.Cantidad, fechaOperacion, conexion, item.CablesExtra);
                     }
                     else
                     {
@@ -342,12 +364,14 @@ namespace LabInventario.Services
                     _prestamoRepo.MarcarDevuelto(prestamo.Id, fecha, conexion);
                     restante -= prestamo.Cantidad;
                 }
-                else
-                {
-                    _prestamoRepo.ActualizarCantidad(prestamo.Id, prestamo.Cantidad - restante, conexion);
-                    _prestamoRepo.CrearDevuelto(alumnoId, materialId, restante, prestamo.FechaSalida, fecha, conexion);
-                    restante = 0;
-                }
+                    else
+                    {
+                        _prestamoRepo.ActualizarCantidad(prestamo.Id, prestamo.Cantidad - restante, conexion);
+                        _prestamoRepo.CrearDevuelto(prestamo.AlumnoId, prestamo.MaterialId,
+                            prestamo.AlumnoNombre, prestamo.NumeroCuenta, prestamo.MaterialNombre, prestamo.CodigoBarras,
+                            restante, prestamo.FechaSalida, fecha, conexion);
+                        restante = 0;
+                    }
             }
         }
     }

@@ -44,8 +44,11 @@ namespace LabInventario.Views
             public bool EsGrupo { get; set; }
             public bool Expandido { get; set; }
             public int? PrestamoId { get; set; }
-            public int AlumnoId { get; set; }
-            public int MaterialId { get; set; }
+
+            // Pueden ser null si el alumno/material se eliminó del catálogo
+            // después del préstamo (el historial conserva su texto).
+            public int? AlumnoId { get; set; }
+            public int? MaterialId { get; set; }
             public string Alumno { get; set; } = "";
             public string Cuenta { get; set; } = "";
             public string Material { get; set; } = "";
@@ -62,7 +65,10 @@ namespace LabInventario.Views
         private readonly PrestamoRepository _repo = new();
         private readonly PrestamoService _servicio = new();
         private readonly ObservableCollection<FilaPrestamo> _filas = new();
-        private readonly HashSet<(int AlumnoId, int MaterialId)> _gruposExpandidos = new();
+        // La agrupación usa cuenta+código (foto del historial) en vez de
+        // IDs: así los préstamos de un alumno o material ya eliminado del
+        // catálogo siguen agrupándose correctamente entre sí.
+        private readonly HashSet<(string Cuenta, string Codigo)> _gruposExpandidos = new();
         private readonly DataGrid _grid;
         private readonly Dictionary<string, string> _encabezadosBase = new();
         private readonly TextBox _txtFiltro = new() { Width = 260 };
@@ -101,7 +107,7 @@ namespace LabInventario.Views
                                 Background = Brushes.Transparent,
                                 BorderThickness = new Avalonia.Thickness(0),
                             };
-                            boton.Click += (_, _) => AlternarExpansion(fila.AlumnoId, fila.MaterialId);
+                            boton.Click += (_, _) => AlternarExpansion(fila.Cuenta, fila.Codigo);
                             return boton;
                         }),
                     },
@@ -250,11 +256,13 @@ namespace LabInventario.Views
             };
 
             var gruposBase = activos
-                .GroupBy(p => (p.AlumnoId, p.MaterialId))
+                .GroupBy(p => (p.NumeroCuenta, p.CodigoBarras))
                 .Select(g => new
                 {
-                    g.Key.AlumnoId,
-                    g.Key.MaterialId,
+                    Cuenta = g.Key.NumeroCuenta,
+                    Codigo = g.Key.CodigoBarras,
+                    AlumnoId = g.First().AlumnoId,
+                    MaterialId = g.First().MaterialId,
                     Alumno = g.First().AlumnoNombre,
                     Cuenta = g.First().NumeroCuenta,
                     Material = g.First().MaterialNombre,
@@ -302,7 +310,7 @@ namespace LabInventario.Views
                     continue;
                 }
 
-                var expandido = _gruposExpandidos.Contains((grupo.AlumnoId, grupo.MaterialId));
+                var expandido = _gruposExpandidos.Contains((grupo.Cuenta, grupo.Codigo));
 
                 _filas.Add(new FilaPrestamo
                 {
@@ -365,9 +373,9 @@ namespace LabInventario.Views
             }
         }
 
-        private void AlternarExpansion(int alumnoId, int materialId)
+        private void AlternarExpansion(string cuenta, string codigo)
         {
-            var clave = (alumnoId, materialId);
+            var clave = (cuenta, codigo);
             if (!_gruposExpandidos.Add(clave))
                 _gruposExpandidos.Remove(clave);
             Cargar();
@@ -400,7 +408,33 @@ namespace LabInventario.Views
             if (dialogoCantidad.Resultado is not int cantidad) return;
 
             if (seleccionado.EsGrupo)
-                _servicio.RegistrarEntradaPorAlumnoYMaterial(seleccionado.AlumnoId, seleccionado.MaterialId, cantidad, DateTime.Now);
+            {
+                if (seleccionado.AlumnoId.HasValue && seleccionado.MaterialId.HasValue)
+                {
+                    _servicio.RegistrarEntradaPorAlumnoYMaterial(
+                        seleccionado.AlumnoId.Value, seleccionado.MaterialId.Value, cantidad, DateTime.Now);
+                }
+                else
+                {
+                    // Alumno o material eliminado del catálogo: se devuelve
+                    // préstamo por préstamo (ya vienen en orden FIFO) sin
+                    // tocar catálogo ni stock inexistente.
+                    var pendientes = _repo.ListarDetallado()
+                        .Where(p => p.Estado == "Activo" &&
+                                    p.NumeroCuenta == seleccionado.Cuenta &&
+                                    p.CodigoBarras == seleccionado.Codigo)
+                        .OrderBy(p => p.FechaSalida)
+                        .ToList();
+                    var restante = cantidad;
+                    foreach (var pendiente in pendientes)
+                    {
+                        if (restante <= 0) break;
+                        var parte = Math.Min(restante, pendiente.Cantidad);
+                        _servicio.RegistrarEntradaDePrestamoEspecifico(pendiente.Id, parte, DateTime.Now);
+                        restante -= parte;
+                    }
+                }
+            }
             else
                 _servicio.RegistrarEntradaDePrestamoEspecifico(seleccionado.PrestamoId!.Value, cantidad, DateTime.Now);
 

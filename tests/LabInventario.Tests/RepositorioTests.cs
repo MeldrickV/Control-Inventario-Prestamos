@@ -1,5 +1,4 @@
 using LabInventario.Services;
-using Microsoft.Data.Sqlite;
 
 namespace LabInventario.Tests
 {
@@ -32,25 +31,48 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public void EliminarAlumno_ConHistorial_LaForeignKeyLoImpide()
+        public void EliminarAlumno_ConHistorial_SePermiteYConservaHistorial()
         {
             CrearAlumnoYMaterial();
             Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 1);
             var id = Alumnos.ObtenerPorCuenta(CuentaAlumno)!.Id;
 
-            Assert.Throws<SqliteException>(() => Alumnos.Eliminar(id));
-            Assert.NotNull(Alumnos.ObtenerPorId(id)); // el alumno sigue ahí
+            Alumnos.Eliminar(id); // ya no lo impide la FK (ON DELETE SET NULL)
+
+            Assert.Null(Alumnos.ObtenerPorCuenta(CuentaAlumno));
+            var fila = Assert.Single(Prestamos.ListarDetallado());
+            Assert.Null(fila.AlumnoId);
+            Assert.Equal(NombreAlumno, fila.AlumnoNombre); // el texto se conserva
+            Assert.Equal(CuentaAlumno, fila.NumeroCuenta);
+            Assert.Equal(NombreMaterial, fila.MaterialNombre);
         }
 
         [Fact]
-        public void EliminarMaterial_ConHistorial_LaForeignKeyLoImpide()
+        public void EliminarMaterial_ConHistorial_SePermiteYConservaHistorial()
         {
             CrearAlumnoYMaterial();
             Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 1);
             var id = Materiales.ObtenerPorCodigo(CodigoMaterial)!.Id;
 
-            Assert.Throws<SqliteException>(() => Materiales.Eliminar(id));
-            Assert.NotNull(Materiales.ObtenerPorId(id));
+            Materiales.Eliminar(id);
+
+            Assert.Null(Materiales.ObtenerPorCodigo(CodigoMaterial));
+            var fila = Assert.Single(Prestamos.ListarDetallado());
+            Assert.Null(fila.MaterialId);
+            Assert.Equal(CodigoMaterial, fila.CodigoBarras); // el texto se conserva
+            Assert.Equal(NombreAlumno, fila.AlumnoNombre);
+        }
+
+        [Fact]
+        public void Historial_ConservaFotoAunqueSeRenombreElCatalogo()
+        {
+            CrearAlumnoYMaterial();
+            Servicio.RegistrarSalida(CuentaAlumno, CodigoMaterial, 1, FechaPrueba(1));
+
+            Alumnos.Actualizar(Alumnos.ObtenerPorCuenta(CuentaAlumno)!.Id, "Nombre Nuevo", CuentaAlumno);
+
+            var fila = Assert.Single(Prestamos.ListarDetallado());
+            Assert.Equal(NombreAlumno, fila.AlumnoNombre); // foto al momento del préstamo
         }
 
         [Fact]

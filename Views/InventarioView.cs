@@ -141,21 +141,15 @@ namespace LabInventario.Views
                 return;
             }
 
-            // Un material con préstamos nunca se borra: la FK de la tabla
-            // prestamos lo impediría de todos modos, pero con este chequeo el
-            // usuario recibe un mensaje claro en vez de un error de SQLite.
-            if (_prestamoRepo.TienePrestamosDeMaterial(seleccionado.Id))
-            {
-                await Dialogos.MostrarAdvertencia(propietaria,
-                    $"No se puede eliminar el material '{seleccionado.Nombre}' porque tiene préstamos registrados. " +
-                    "Si ya no debe usarse, revisa su historial en la pestaña Historial antes de darlo de baja.",
-                    "Eliminación bloqueada");
-                return;
-            }
+            // Un material con préstamos SÍ se puede borrar: sus préstamos
+            // quedan en el historial con los datos de ese momento, pero el
+            // material desaparece del catálogo y ya no se puede prestar.
+            var mensaje = _prestamoRepo.TienePrestamosDeMaterial(seleccionado.Id)
+                ? $"'{seleccionado.Nombre}' tiene préstamos en el historial. El historial se conserva con sus datos, " +
+                  "pero el material desaparecerá del catálogo y ya no se podrá prestar.\n\n¿Eliminar de todos modos?"
+                : $"¿Eliminar el material '{seleccionado.Nombre}'? Esta acción no se puede deshacer.";
 
-            var confirmar = await Dialogos.Confirmar(propietaria,
-                $"¿Eliminar el material '{seleccionado.Nombre}'? Esta acción no se puede deshacer.",
-                "Confirmar eliminación");
+            var confirmar = await Dialogos.Confirmar(propietaria, mensaje, "Confirmar eliminación");
 
             if (confirmar)
             {

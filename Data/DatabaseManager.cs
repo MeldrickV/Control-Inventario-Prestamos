@@ -270,8 +270,15 @@ namespace LabInventario.Data
 
                 CREATE TABLE IF NOT EXISTS prestamos (
                     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                    AlumnoId      INTEGER NOT NULL,
-                    MaterialId    INTEGER NOT NULL,
+                    AlumnoId      INTEGER NULL,
+                    MaterialId    INTEGER NULL,
+                    -- Foto de los datos al momento del préstamo: el historial
+                    -- conserva el texto aunque después se borre el alumno o
+                    -- el material del catálogo (ver MigrarPrestamosBorradoFlexible).
+                    AlumnoNombre   TEXT NOT NULL DEFAULT '',
+                    NumeroCuenta   TEXT NOT NULL DEFAULT '',
+                    MaterialNombre TEXT NOT NULL DEFAULT '',
+                    CodigoBarras   TEXT NOT NULL DEFAULT '',
                     Cantidad      INTEGER NOT NULL,
                     FechaSalida   TEXT NOT NULL,
                     FechaRegreso  TEXT NULL,
@@ -281,8 +288,8 @@ namespace LabInventario.Data
                     -- stock ni inventario: es solo un registro informativo
                     -- del historial (ver Services/DetectorComplementos.cs).
                     CablesExtra   INTEGER NOT NULL DEFAULT 0,
-                    FOREIGN KEY (AlumnoId) REFERENCES alumnos(Id),
-                    FOREIGN KEY (MaterialId) REFERENCES materiales(Id)
+                    FOREIGN KEY (AlumnoId) REFERENCES alumnos(Id) ON DELETE SET NULL,
+                    FOREIGN KEY (MaterialId) REFERENCES materiales(Id) ON DELETE SET NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_prestamos_estado   ON prestamos(Estado);
@@ -313,6 +320,94 @@ namespace LabInventario.Data
                     alter.ExecuteNonQuery();
                 }
             }
+
+            MigrarPrestamosBorradoFlexible(conexion);
+        }
+
+        /// <summary>
+        /// Migra `prestamos` al borrado flexible: columnas de foto
+        /// (nombres/cuenta/código al momento del préstamo, rellenadas desde
+        /// las tablas vivas) y claves foráneas con `ON DELETE SET NULL` para
+        /// que borrar un alumno o material con historial sea posible sin
+        /// perder el texto del historial. SQLite no permite alterar FK con
+        /// ALTER TABLE, así que si las FK aún son restrictivas se reconstruye
+        /// la tabla (copia exacta + DROP + RENAME + índices).
+        /// </summary>
+        private void MigrarPrestamosBorradoFlexible(SqliteConnection conexion)
+        {
+            foreach (var columna in new[] { "AlumnoNombre", "NumeroCuenta", "MaterialNombre", "CodigoBarras" })
+            {
+                if (!ColumnaExiste(conexion, "prestamos", columna))
+                {
+                    using var alter = conexion.CreateCommand();
+                    alter.CommandText = $"ALTER TABLE prestamos ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''";
+                    alter.ExecuteNonQuery();
+                }
+            }
+
+            using (var rellenar = conexion.CreateCommand())
+            {
+                rellenar.CommandText = @"
+                    UPDATE prestamos
+                    SET AlumnoNombre = COALESCE((SELECT Nombre FROM alumnos WHERE Id = prestamos.AlumnoId), AlumnoNombre),
+                        NumeroCuenta = COALESCE((SELECT NumeroCuenta FROM alumnos WHERE Id = prestamos.AlumnoId), NumeroCuenta),
+                        MaterialNombre = COALESCE((SELECT Nombre FROM materiales WHERE Id = prestamos.MaterialId), MaterialNombre),
+                        CodigoBarras = COALESCE((SELECT CodigoBarras FROM materiales WHERE Id = prestamos.MaterialId), CodigoBarras)
+                    WHERE AlumnoNombre = '' OR NumeroCuenta = '' OR MaterialNombre = '' OR CodigoBarras = '';";
+                rellenar.ExecuteNonQuery();
+            }
+
+            if (PrestamosPermiteBorrado(conexion)) return;
+
+            using var migracion = conexion.CreateCommand();
+            migracion.CommandText = @"
+                CREATE TABLE prestamos_nueva (
+                    Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    AlumnoId       INTEGER NULL,
+                    MaterialId     INTEGER NULL,
+                    AlumnoNombre   TEXT NOT NULL DEFAULT '',
+                    NumeroCuenta   TEXT NOT NULL DEFAULT '',
+                    MaterialNombre TEXT NOT NULL DEFAULT '',
+                    CodigoBarras   TEXT NOT NULL DEFAULT '',
+                    Cantidad       INTEGER NOT NULL,
+                    FechaSalida    TEXT NOT NULL,
+                    FechaRegreso   TEXT NULL,
+                    Estado         TEXT NOT NULL DEFAULT 'Activo',
+                    CablesExtra    INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY (AlumnoId) REFERENCES alumnos(Id) ON DELETE SET NULL,
+                    FOREIGN KEY (MaterialId) REFERENCES materiales(Id) ON DELETE SET NULL
+                );
+                INSERT INTO prestamos_nueva
+                    (Id, AlumnoId, MaterialId, AlumnoNombre, NumeroCuenta, MaterialNombre, CodigoBarras,
+                     Cantidad, FechaSalida, FechaRegreso, Estado, CablesExtra)
+                SELECT Id, AlumnoId, MaterialId, AlumnoNombre, NumeroCuenta, MaterialNombre, CodigoBarras,
+                       Cantidad, FechaSalida, FechaRegreso, Estado, CablesExtra
+                FROM prestamos;
+                DROP TABLE prestamos;
+                ALTER TABLE prestamos_nueva RENAME TO prestamos;
+                CREATE INDEX IF NOT EXISTS idx_prestamos_estado   ON prestamos(Estado);
+                CREATE INDEX IF NOT EXISTS idx_prestamos_alumno   ON prestamos(AlumnoId);
+                CREATE INDEX IF NOT EXISTS idx_prestamos_material ON prestamos(MaterialId);";
+            migracion.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// True si ambas FK de `prestamos` ya son `ON DELETE SET NULL`.
+        /// </summary>
+        private static bool PrestamosPermiteBorrado(SqliteConnection conexion)
+        {
+            using var comando = conexion.CreateCommand();
+            comando.CommandText = "PRAGMA foreign_key_list(\"prestamos\")";
+            using var lector = comando.ExecuteReader();
+            var revisadas = 0;
+            var indiceAccion = lector.GetOrdinal("on_delete");
+            while (lector.Read())
+            {
+                revisadas++;
+                if (!string.Equals(lector.GetString(indiceAccion), "SET NULL", StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return revisadas == 2;
         }
 
         // Columnas nuevas que se añaden a instalaciones anteriores (una por

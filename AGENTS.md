@@ -29,7 +29,7 @@ Parámetros del proyecto **LabInventario** para tener en cuenta en toda interacc
 
 ## Reglas de negocio fijadas
 
-- Alumnos y materiales con historial de préstamos **nunca se borran** (se bloquea con mensaje claro; la FK es solo red de seguridad).
+- Alumnos y materiales con historial **sí se pueden borrar** (con confirmación que avisa): el historial conserva su texto porque `prestamos` guarda foto de nombres/cuenta/código al momento del préstamo y sus FK son `ON DELETE SET NULL` (ver `MigrarPrestamosBorradoFlexible`).
 - Devoluciones: FIFO (descuenta primero la salida más antigua); las parciales dejan la fila activa con cantidad restante y crean una fila "Devuelta" visible con la parte devuelta.
 - `RegistrarLote` crea **una fila de préstamo por ítem** (no agrupa cantidades).
 - **Historial sin purga automática**: se conserva todo. La limpieza es SOLO manual (Administrador) vía menú `Administración → Limpiar historial antiguo...`: diálogo con días (default 30), conteo previo (`ContarDevueltosAntiguos`) y confirmación. Default de `PrestamoRepository.EliminarDevueltosAntiguos` = 30.

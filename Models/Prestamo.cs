@@ -6,12 +6,27 @@ namespace LabInventario.Models
         Devuelto
     }
 
-    // Representa una fila de la tabla `prestamos`.
+    // Representa una fila de la tabla `prestamos`. AlumnoId/MaterialId
+    // pueden ser null cuando el alumno o material se eliminó del catálogo:
+    // el historial conserva su texto en los campos de foto de abajo.
     public class Prestamo
     {
         public int Id { get; set; }
-        public int AlumnoId { get; set; }
-        public int MaterialId { get; set; }
+        public int? AlumnoId { get; set; }
+        public int? MaterialId { get; set; }
+
+        /// <summary>Foto al momento del préstamo (no cambia si se renombra o borra el catálogo).</summary>
+        public string AlumnoNombre { get; set; } = string.Empty;
+
+        /// <summary>Foto al momento del préstamo.</summary>
+        public string NumeroCuenta { get; set; } = string.Empty;
+
+        /// <summary>Foto al momento del préstamo.</summary>
+        public string MaterialNombre { get; set; } = string.Empty;
+
+        /// <summary>Foto al momento del préstamo.</summary>
+        public string CodigoBarras { get; set; } = string.Empty;
+
         public int Cantidad { get; set; }
         public DateTime FechaSalida { get; set; }
         public DateTime? FechaRegreso { get; set; }
@@ -32,8 +47,8 @@ namespace LabInventario.Models
     public class PrestamoDetalle
     {
         public int Id { get; set; }
-        public int AlumnoId { get; set; }
-        public int MaterialId { get; set; }
+        public int? AlumnoId { get; set; }
+        public int? MaterialId { get; set; }
         public string AlumnoNombre { get; set; } = string.Empty;
         public string NumeroCuenta { get; set; } = string.Empty;
         public string MaterialNombre { get; set; } = string.Empty;

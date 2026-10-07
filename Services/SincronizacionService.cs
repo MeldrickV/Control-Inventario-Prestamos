@@ -407,9 +407,9 @@ namespace LabInventario.Services
 
         /// <summary>
         /// Aplica la lista confirmada en el diálogo. Cada operación es
-        /// idempotente (repetirla no duplica ni corrompe): las bajas de
-        /// registros con historial se bloquean con mensaje, como en el
-        /// borrado local.
+        /// idempotente (repetirla no duplica ni corrompe): las bajas siempre
+        /// se ejecutan y el historial conserva su texto (foto al momento del
+        /// préstamo), igual que en el borrado local.
         /// </summary>
         public Task<ResultadoAplicacion> AplicarCambiosAsync(IEnumerable<CambioSincronizacion> cambios, CancellationToken ct = default)
         {
@@ -456,13 +456,8 @@ namespace LabInventario.Services
                         resultado.Aplicados++;
                     }
                     break;
-                default: // Baja
+                default: // Baja (permitida con historial: el historial conserva su texto)
                     if (local is null) { resultado.Omitidos++; return; }
-                    if (_prestamos.TienePrestamosDeAlumno(local.Id))
-                    {
-                        resultado.Bloqueados.Add($"BAJA alumno {cambio.Clave}: tiene préstamos registrados y no se puede eliminar.");
-                        return;
-                    }
                     _alumnos.Eliminar(local.Id);
                     resultado.Aplicados++;
                     break;
@@ -507,13 +502,8 @@ namespace LabInventario.Services
                         resultado.Aplicados++;
                     }
                     break;
-                default: // Baja
+                default: // Baja (permitida con historial: el historial conserva su texto)
                     if (local is null) { resultado.Omitidos++; return; }
-                    if (_prestamos.TienePrestamosDeMaterial(local.Id))
-                    {
-                        resultado.Bloqueados.Add($"BAJA material {cambio.Clave}: tiene préstamos registrados y no se puede eliminar.");
-                        return;
-                    }
                     _materiales.Eliminar(local.Id);
                     resultado.Aplicados++;
                     break;

@@ -16,17 +16,21 @@ namespace LabInventario.Data
         /// </summary>
         public PrestamoRepository(DatabaseManager? db = null) => _db = db ?? DatabaseManager.Instancia;
 
-        public int Crear(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, SqliteConnection? conexion = null, int cablesExtra = 0)
+        public int Crear(int? alumnoId, int? materialId, string alumnoNombre, string numeroCuenta, string materialNombre, string codigoBarras, int cantidad, DateTime fechaSalida, SqliteConnection? conexion = null, int cablesExtra = 0)
         {
             using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
             var con = conexion ?? conexionPropia!;
             using var comando = con.CreateCommand();
             comando.CommandText = @"
-                INSERT INTO prestamos (AlumnoId, MaterialId, Cantidad, FechaSalida, Estado, CablesExtra)
-                VALUES ($alumnoId, $materialId, $cantidad, $fecha, 'Activo', $cablesExtra);
+                INSERT INTO prestamos (AlumnoId, MaterialId, AlumnoNombre, NumeroCuenta, MaterialNombre, CodigoBarras, Cantidad, FechaSalida, Estado, CablesExtra)
+                VALUES ($alumnoId, $materialId, $alumnoNombre, $cuenta, $materialNombre, $codigo, $cantidad, $fecha, 'Activo', $cablesExtra);
                 SELECT last_insert_rowid();";
-            comando.Parameters.AddWithValue("$alumnoId", alumnoId);
-            comando.Parameters.AddWithValue("$materialId", materialId);
+            comando.Parameters.AddWithValue("$alumnoId", (object?)alumnoId ?? DBNull.Value);
+            comando.Parameters.AddWithValue("$materialId", (object?)materialId ?? DBNull.Value);
+            comando.Parameters.AddWithValue("$alumnoNombre", alumnoNombre);
+            comando.Parameters.AddWithValue("$cuenta", numeroCuenta);
+            comando.Parameters.AddWithValue("$materialNombre", materialNombre);
+            comando.Parameters.AddWithValue("$codigo", codigoBarras);
             comando.Parameters.AddWithValue("$cantidad", cantidad);
             comando.Parameters.AddWithValue("$fecha", fechaSalida.ToString("yyyy-MM-dd HH:mm:ss"));
             comando.Parameters.AddWithValue("$cablesExtra", cablesExtra);
@@ -72,17 +76,21 @@ namespace LabInventario.Data
         /// FechaRegreso de este momento — así la devolución parcial deja
         /// rastro en vez de perderse dentro del préstamo activo restante.
         /// </summary>
-        public int CrearDevuelto(int alumnoId, int materialId, int cantidad, DateTime fechaSalida, DateTime fechaRegreso, SqliteConnection? conexion = null)
+        public int CrearDevuelto(int? alumnoId, int? materialId, string alumnoNombre, string numeroCuenta, string materialNombre, string codigoBarras, int cantidad, DateTime fechaSalida, DateTime fechaRegreso, SqliteConnection? conexion = null)
         {
             using var conexionPropia = conexion is null ? _db.ObtenerConexion() : null;
             var con = conexion ?? conexionPropia!;
             using var comando = con.CreateCommand();
             comando.CommandText = @"
-                INSERT INTO prestamos (AlumnoId, MaterialId, Cantidad, FechaSalida, FechaRegreso, Estado)
-                VALUES ($alumnoId, $materialId, $cantidad, $fechaSalida, $fechaRegreso, 'Devuelto');
+                INSERT INTO prestamos (AlumnoId, MaterialId, AlumnoNombre, NumeroCuenta, MaterialNombre, CodigoBarras, Cantidad, FechaSalida, FechaRegreso, Estado)
+                VALUES ($alumnoId, $materialId, $alumnoNombre, $cuenta, $materialNombre, $codigo, $cantidad, $fechaSalida, $fechaRegreso, 'Devuelto');
                 SELECT last_insert_rowid();";
-            comando.Parameters.AddWithValue("$alumnoId", alumnoId);
-            comando.Parameters.AddWithValue("$materialId", materialId);
+            comando.Parameters.AddWithValue("$alumnoId", (object?)alumnoId ?? DBNull.Value);
+            comando.Parameters.AddWithValue("$materialId", (object?)materialId ?? DBNull.Value);
+            comando.Parameters.AddWithValue("$alumnoNombre", alumnoNombre);
+            comando.Parameters.AddWithValue("$cuenta", numeroCuenta);
+            comando.Parameters.AddWithValue("$materialNombre", materialNombre);
+            comando.Parameters.AddWithValue("$codigo", codigoBarras);
             comando.Parameters.AddWithValue("$cantidad", cantidad);
             comando.Parameters.AddWithValue("$fechaSalida", fechaSalida.ToString("yyyy-MM-dd HH:mm:ss"));
             comando.Parameters.AddWithValue("$fechaRegreso", fechaRegreso.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -164,7 +172,7 @@ namespace LabInventario.Data
 
             if (!string.IsNullOrWhiteSpace(filtro))
             {
-                condiciones.Add("(a.Nombre LIKE $f OR a.NumeroCuenta LIKE $f OR m.Nombre LIKE $f OR m.CodigoBarras LIKE $f)");
+                condiciones.Add("(p.AlumnoNombre LIKE $f OR p.NumeroCuenta LIKE $f OR p.MaterialNombre LIKE $f OR p.CodigoBarras LIKE $f)");
                 comando.Parameters.AddWithValue("$f", $"%{filtro}%");
             }
 
@@ -172,12 +180,10 @@ namespace LabInventario.Data
 
             comando.CommandText = $@"
                 SELECT p.Id, p.AlumnoId, p.MaterialId,
-                       a.Nombre AS AlumnoNombre, a.NumeroCuenta,
-                       m.Nombre AS MaterialNombre, m.CodigoBarras,
+                       p.AlumnoNombre, p.NumeroCuenta,
+                       p.MaterialNombre, p.CodigoBarras,
                        p.Cantidad, p.FechaSalida, p.FechaRegreso, p.Estado, p.CablesExtra
                 FROM prestamos p
-                JOIN alumnos a ON p.AlumnoId = a.Id
-                JOIN materiales m ON p.MaterialId = m.Id
                 {clausulaWhere}
                 ORDER BY p.FechaSalida DESC";
 
@@ -187,8 +193,8 @@ namespace LabInventario.Data
                 resultado.Add(new PrestamoDetalle
                 {
                     Id = lector.GetInt32(lector.GetOrdinal("Id")),
-                    AlumnoId = lector.GetInt32(lector.GetOrdinal("AlumnoId")),
-                    MaterialId = lector.GetInt32(lector.GetOrdinal("MaterialId")),
+                    AlumnoId = lector.IsDBNull(lector.GetOrdinal("AlumnoId")) ? null : lector.GetInt32(lector.GetOrdinal("AlumnoId")),
+                    MaterialId = lector.IsDBNull(lector.GetOrdinal("MaterialId")) ? null : lector.GetInt32(lector.GetOrdinal("MaterialId")),
                     AlumnoNombre = lector.GetString(lector.GetOrdinal("AlumnoNombre")),
                     NumeroCuenta = lector.GetString(lector.GetOrdinal("NumeroCuenta")),
                     MaterialNombre = lector.GetString(lector.GetOrdinal("MaterialNombre")),
@@ -217,8 +223,12 @@ namespace LabInventario.Data
         private static Prestamo Mapear(SqliteDataReader lector) => new()
         {
             Id = lector.GetInt32(lector.GetOrdinal("Id")),
-            AlumnoId = lector.GetInt32(lector.GetOrdinal("AlumnoId")),
-            MaterialId = lector.GetInt32(lector.GetOrdinal("MaterialId")),
+            AlumnoId = lector.IsDBNull(lector.GetOrdinal("AlumnoId")) ? null : lector.GetInt32(lector.GetOrdinal("AlumnoId")),
+            MaterialId = lector.IsDBNull(lector.GetOrdinal("MaterialId")) ? null : lector.GetInt32(lector.GetOrdinal("MaterialId")),
+            AlumnoNombre = lector.GetString(lector.GetOrdinal("AlumnoNombre")),
+            NumeroCuenta = lector.GetString(lector.GetOrdinal("NumeroCuenta")),
+            MaterialNombre = lector.GetString(lector.GetOrdinal("MaterialNombre")),
+            CodigoBarras = lector.GetString(lector.GetOrdinal("CodigoBarras")),
             Cantidad = lector.GetInt32(lector.GetOrdinal("Cantidad")),
             FechaSalida = ParsearFecha(lector.GetString(lector.GetOrdinal("FechaSalida"))),
             FechaRegreso = lector.IsDBNull(lector.GetOrdinal("FechaRegreso"))

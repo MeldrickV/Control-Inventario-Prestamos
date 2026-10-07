@@ -199,7 +199,7 @@ namespace LabInventario.Tests
         }
 
         [Fact]
-        public async Task AplicarCambios_BajaConHistorial_SeBloquea()
+        public async Task AplicarCambios_BajaConHistorial_EliminaYConservaHistorial()
         {
             ConfigurarSync();
             CrearAlumnoYMaterial();
@@ -213,10 +213,12 @@ namespace LabInventario.Tests
 
             var resultado = await _sync.AplicarCambiosAsync(cambios);
 
-            Assert.Equal(0, resultado.Aplicados);
-            Assert.Equal(2, resultado.Bloqueados.Count);
-            Assert.NotNull(Alumnos.ObtenerPorCuenta(CuentaAlumno));
-            Assert.NotNull(Materiales.ObtenerPorCodigo(CodigoMaterial));
+            Assert.Equal(2, resultado.Aplicados);
+            Assert.Null(Alumnos.ObtenerPorCuenta(CuentaAlumno));
+            Assert.Null(Materiales.ObtenerPorCodigo(CodigoMaterial));
+            var fila = Assert.Single(Prestamos.ListarDetallado());
+            Assert.Equal(NombreAlumno, fila.AlumnoNombre);
+            Assert.Equal(NombreMaterial, fila.MaterialNombre);
         }
 
         [Fact]

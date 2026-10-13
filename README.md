@@ -25,6 +25,16 @@ El sistema dispone de dos roles:
 
 La contraseña del administrador se almacena mediante **hash y salt** en la base de datos, en lugar de guardarse como texto plano.
 
+### ❓ Ayuda integrada
+
+El menú superior **Ayuda** abre el manual paso a paso dentro de la propia aplicación, pensado para instaladores sin experiencia:
+
+- **Manual de uso...**: primeros pasos, salidas, devoluciones, historial y qué hacer si algo falla.
+- **Conectar Google Sheets paso a paso...** (solo administrador): desde crear la hoja hasta probar la conexión, con el script copiable incluido.
+- **Acerca de...**: versión, tecnología y soporte.
+
+Las secciones de administrador (importar, exportar, nube) solo aparecen entrando como **Administrador**; como **Usuario** solo se ven las de operación.
+
 ### 📦 Gestión de inventario
 
 Permite:
@@ -126,14 +136,6 @@ Actualmente se pueden importar:
 
 El sistema analiza los encabezados del archivo y propone automáticamente un mapeo entre las columnas del archivo y los campos internos. El usuario puede revisar o modificar ese mapeo antes de realizar la importación.
 
-Los archivos de ejemplo se encuentran en:
-
-```text
-ejemplos/
-├── alumnos_ejemplo.csv
-└── materiales_ejemplo.csv
-```
-
 ## Detección automática durante el escaneo
 
 El sistema puede determinar si un código corresponde probablemente a un alumno o a un material.
@@ -176,7 +178,7 @@ Reglas para el revisor: nunca vaciar una pestaña completa; los borrados se prop
 
 Vinculación (todo desde la app ya compilada; un solo ejecutable para todos):
 
-1. **Una sola vez por laboratorio**: con su cuenta Google crear el spreadsheet (vacío, ej. `LabInventario - LAB-1`) y dentro de él abrir **Extensiones → Apps Script** (así el script queda vinculado a esa hoja), pegar `apps-script/Codigo.gs`, ejecutar `configurar()` una vez, **Desplegar como App web** (ejecutar como *yo*, acceso *cualquiera*), autorizar y copiar la **URL `/exec`** + la **clave** (⚙️ Configuración del proyecto → Propiedades del script → `CLAVE`). Alternativa: script standalone en `script.google.com` + ID de la hoja en la propiedad `SPREADSHEET_ID`.
+1. **Una sola vez por laboratorio**: con su cuenta Google crear el spreadsheet (vacío, ej. `LabInventario - LAB-1`) y dentro de él abrir **Extensiones → Apps Script** (así el script queda vinculado a esa hoja), pegar el script (en la app: menú **Ayuda → Conectar Google Sheets paso a paso... → Copiar script**; origen en el repo: `apps-script/Codigo.gs`), ejecutar `configurar()` una vez, **Desplegar como App web** (ejecutar como *yo*, acceso *cualquiera*), autorizar y copiar la **URL `/exec`** + la **clave** (⚙️ Configuración del proyecto → Propiedades del script → `CLAVE`). Alternativa: script standalone en `script.google.com` + ID de la hoja en la propiedad `SPREADSHEET_ID`.
 2. **En cada computadora (administrador)**: menú `Administración → Configuración de sincronización…` → pegar **URL del script** y **clave**, el identificador de la computadora (`LAB-1`, …) y el laboratorio → **Probar conexión**. Listo.
 3. Cada laboratorio usa **su propio despliegue y spreadsheet**: aislamiento total entre sitios, sin coordinación central y sin recompilar nada.
 
@@ -214,9 +216,14 @@ LabInventario
 │
 ├── Dialogs/
 │   ├── AlumnoDialog.cs
+│   ├── AyudaDialog.cs
+│   ├── BusquedaManualDialog.cs
+│   ├── CablesDialog.cs
 │   ├── CambiarPasswordDialog.cs
 │   ├── CantidadDialog.cs
 │   ├── ConfiguracionEscaneoDialog.cs
+│   ├── ConfiguracionSincronizacionDialog.cs
+│   ├── ConfirmarCambiosDialog.cs
 │   ├── LimpiarHistorialDialog.cs
 │   ├── MapeoColumnasDialog.cs
 │   └── MaterialDialog.cs
@@ -231,13 +238,20 @@ LabInventario
 │   └── Rol.cs
 │
 ├── Services/
+│   ├── AppsScriptClient.cs
 │   ├── AuthService.cs
+│   ├── AyudaContenido.cs
+│   ├── BusquedaManualService.cs
+│   ├── CambioSincronizacion.cs
+│   ├── DetectorComplementos.cs
 │   ├── DetectorPatrones.cs
 │   ├── ExportService.cs
 │   ├── ImportService.cs
+│   ├── ISheetsClient.cs
 │   ├── PrestamoException.cs
 │   ├── PrestamoService.cs
-│   └── SesionActual.cs
+│   ├── SesionActual.cs
+│   └── SincronizacionService.cs
 │
 ├── Views/
 │   ├── AlumnosView.cs
@@ -254,9 +268,8 @@ LabInventario
 ├── tests/
 │   └── LabInventario.Tests/   (pruebas xUnit)
 │
-├── ejemplos/
-│   ├── alumnos_ejemplo.csv
-│   └── materiales_ejemplo.csv
+├── apps-script/
+│   └── Codigo.gs   (script de sincronización con Google Sheets)
 │
 ├── App.axaml
 ├── App.cs

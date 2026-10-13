@@ -182,6 +182,35 @@ namespace LabInventario.Windows
             menuSesion.Items.Add(itemCerrarSesion);
             items.Add(menuSesion);
 
+            var menuAyuda = new MenuItem { Header = "Ayuda" };
+            var itemManual = new MenuItem { Header = "Manual de uso..." };
+            itemManual.Click += async (_, _) =>
+            {
+                var dialogo = new AyudaDialog();
+                await dialogo.ShowDialog(this);
+            };
+            menuAyuda.Items.Add(itemManual);
+
+            if (esAdmin)
+            {
+                var itemGoogle = new MenuItem { Header = "Conectar Google Sheets paso a paso..." };
+                itemGoogle.Click += async (_, _) =>
+                {
+                    var dialogo = new AyudaDialog(AyudaContenido.IdGoogle);
+                    await dialogo.ShowDialog(this);
+                };
+                menuAyuda.Items.Add(itemGoogle);
+            }
+
+            var itemAcerca = new MenuItem { Header = "Acerca de..." };
+            itemAcerca.Click += async (_, _) =>
+            {
+                var dialogo = new AyudaDialog(AyudaContenido.IdAcercaDe);
+                await dialogo.ShowDialog(this);
+            };
+            menuAyuda.Items.Add(itemAcerca);
+            items.Add(menuAyuda);
+
             if (esAdmin)
             {
                 var itemPassword = new MenuItem { Header = "Cambiar contraseña de administrador..." };

@@ -56,3 +56,5 @@ Parámetros del proyecto **LabInventario** para tener en cuenta en toda interacc
 - Purga automática eliminada de `App.cs` y `PrestamosView.Actualizar()`; `PrestamosView` expone `FiltroActual` y `SoloActivosActual` para que `ExportarView` exporte el historial con los filtros vigentes.
 - `App.cs` controla el ciclo login→main (ShutdownMode.OnExplicitShutdown) y registra excepciones no capturadas en `errores.log`.
 - `Program.cs` es el punto de entrada ([STAThread] + `SQLitePCL.Batteries_V2.Init()` para el motor nativo SQLCipher + `StartWithClassicDesktopLifetime`).
+- Ayuda integrada: menú superior `Ayuda` (siempre visible) con `Dialogs/AyudaDialog.cs` + contenido en `Services/AyudaContenido.cs` (`SeccionAyuda`, `Para(esAdmin)` filtra `SoloAdmin`; usuario nunca ve importar/exportar/nube). `AyudaDialog` es la excepción al tamaño de diálogos (ventana grande redimensionable con scroll, no SizeToContent). Script embebido como `EmbeddedResource` (`apps-script\Codigo.gs`, lectura por sufijo `Codigo.gs`) para el botón «Copiar script».
+- Carpeta `ejemplos/` eliminada del repo (ya no se distribuyen CSV de ejemplo).

@@ -60,10 +60,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Los archivos de ejemplo se copian junto al ejecutable para poder probar la importación -->
-    <None Include="ejemplos\**\*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <!-- Script de sincronización embebido para la ayuda (botón "Copiar
+         script"): la app instalada no trae archivos sueltos, así el
+         instalador lo obtiene desde el menú Ayuda sin ir a GitHub. -->
+    <EmbeddedResource Include="apps-script\Codigo.gs" />
+    <None Remove="apps-script\Codigo.gs" />
   </ItemGroup>
 
   <ItemGroup>

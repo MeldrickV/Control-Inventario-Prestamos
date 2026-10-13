@@ -573,7 +573,7 @@ El flujo principal de la aplicación puede resumirse así:
 
 ## Historial de versiones
 
-- **v1.1.0** — Escaneo de alumnos tolerante a guiones: se reconoce el mismo número de cuenta escribiéndose con o sin guion (p. ej. `18458688` y `1845868-8`).
+- **v1.1.0** — Escaneo de alumnos tolerante a guiones: se reconoce el mismo número de cuenta escribiéndose con o sin guion (p. ej. `23586285` y `2358628-5`).
 - **v1.0.0** — Primera versión estable: inventario, alumnos, préstamos FIFO, escaneo de códigos, importación/exportación CSV/XLSX y respaldo cifrado.
 
 ## Estado del proyecto
